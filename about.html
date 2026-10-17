@@ -135,7 +135,7 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
   <div class="facts">
     <div><b>4</b><span>活動類型</span></div>
     <div><b>29</b><span>傷病</span></div>
-    <div><b>116</b><span>處置技術</span></div>
+    <div><b>115</b><span>處置技術</span></div>
     <div><b>153</b><span>裝備品項</span></div>
     <div><b>147</b><span>文獻發現</span></div>
     <div><b>15</b><span>資料表</span></div>
@@ -185,7 +185,7 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
     <div class="link" role="listitem"><span class="n">4</span><span class="t">活動</span><span class="s">登山、雪山、攀岩、溯溪</span></div>
     <div class="link" role="listitem"><span class="n">29</span><span class="t">傷病</span><span class="s">每個活動各自的發生率與致命性</span></div>
     <div class="link" role="listitem"><span class="n">55</span><span class="t">臨床目標</span><span class="s">例：控制外出血、建立靜脈通路</span></div>
-    <div class="link" role="listitem"><span class="n">116</span><span class="t">技術</span><span class="s">例：直接加壓、靜脈管路建立</span></div>
+    <div class="link" role="listitem"><span class="n">115</span><span class="t">技術</span><span class="s">例：直接加壓、靜脈管路建立</span></div>
     <div class="link hl" role="listitem"><span class="n">3</span><span class="t">層</span><span class="s">Best／Better／Basic</span></div>
     <div class="link hl" role="listitem"><span class="n">格</span><span class="t">格位</span><span class="s">同一格裡的品項可以互相替代</span></div>
     <div class="link" role="listitem"><span class="n">153</span><span class="t">裝備</span><span class="s">每件有重量與計重規則</span></div>
@@ -217,7 +217,7 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
         <li><span>活動 <code>activities</code></span><span class="c">4</span></li>
         <li><span>傷病 <code>conditions</code></span><span class="c">29</span></li>
         <li><span>臨床目標 <code>goals</code></span><span class="c">55</span></li>
-        <li><span>技術 <code>techniques</code></span><span class="c">116</span></li>
+        <li><span>技術 <code>techniques</code></span><span class="c">115</span></li>
         <li><span>裝備 <code>items</code></span><span class="c">153</span></li>
         <li><span>執行者等級 <code>providers</code></span><span class="c">5</span></li>
         <li><span>任務型態 <code>missions</code></span><span class="c">3</span></li>
@@ -228,8 +228,8 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
       <ul>
         <li><span>活動 → 傷病風險 <code>activity_risk</code></span><span class="c">90</span></li>
         <li><span>傷病 → 目標 <code>condition_goal</code></span><span class="c">194</span></li>
-        <li><span>目標 → 技術 <code>goal_technique</code></span><span class="c">119</span></li>
-        <li><span>技術 → 三層 <code>technique_tier</code></span><span class="c">348</span></li>
+        <li><span>目標 → 技術 <code>goal_technique</code></span><span class="c">118</span></li>
+        <li><span>技術 → 三層 <code>technique_tier</code></span><span class="c">345</span></li>
         <li><span>層 → 裝備（含格位） <code>tier_item</code></span><span class="c">269</span></li>
         <li><span>技術限定傷病 <code>technique_condition</code></span><span class="c">24</span></li>
       </ul>
@@ -264,10 +264,10 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
   </div>
   <p>求解器 <code>web/solve.js</code> 是唯一的實作：網頁直接在瀏覽器裡算，命令列用同一份程式碼跑回歸測試。同樣的輸入永遠得到同樣的結果。</p>
   <ol class="steps">
-    <li><b>拆成覆蓋單位</b><p>把「傷病 × 可處理它的技術」當成一個單位，分數 = 該傷病的嚴重度。登山有 23 種傷病，共 345 個單位。</p></li>
+    <li><b>拆成覆蓋單位</b><p>把「傷病 × 可處理它的技術」當成一個單位，分數 = 該傷病的嚴重度。登山有 23 種傷病，共 340 個單位。</p></li>
     <li><b>先排除做不到的</b><p>野外不可行、超過執行者權限、三層都沒有方案的技術，直接剔除，不佔重量。</p></li>
     <li><b>每個單位找第一個帶得動的層</b><p>依 Best → Better → Basic 往下找。每一格先看包裡有沒有已經帶的品項可以共用；沒有就挑最輕、且不超過單件上限的那件。徒手層成本 0 g。</p></li>
-    <li><b>貪婪挑選</b><p>每一輪挑「分數 ÷ 新增重量」最高的單位裝進去，然後重算。已經在包裡的裝備不再計重，所以一件東西能同時服務多個處置，就越容易被選中。大出血（M）類先裝完，才輪其他類別。</p></li>
+    <li><b>貪婪挑選</b><p>每一輪挑「效益 ÷ 新增重量」最高的單位裝進去，然後重算。效益有兩種算法：只算這一項處置，或算新增裝備能一起覆蓋的所有處置（例如一個垃圾袋同時撐起保暖與失溫防水打包）。兩種都跑，取覆蓋分數總和較高的結果。大出血（M）類先裝完，才輪其他類別。</p></li>
     <li><b>同時佔用就多帶一份</b><p>Better／Basic 層有些用品會被同一位傷患的兩個處置同時佔用（例如三角巾），這時多帶一份。</p></li>
     <li><b>預算用完或沒有單位裝得下就停</b><p>同分時依「分數 → 傷病編號 → 技術編號」固定排序，結果可重現。</p></li>
   </ol>
@@ -304,14 +304,14 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
   <div class="legend"><span>solo 600 g</span><span class="team">team 1,800 g</span></div>
   <div class="bars" role="img" aria-label="8 組情境覆蓋率長條圖">
     <div class="axis"><span></span><div><span>0%</span><span>50%</span><span>100%</span></div><span></span></div>
-    <div class="bar"><span>登山 solo</span><div class="track"><div class="fill" style="width:75.7%"></div></div><span class="v">261/345 · 579 g</span></div>
-    <div class="bar"><span>登山 team</span><div class="track"><div class="fill team" style="width:86.1%"></div></div><span class="v">297/345 · 1,782 g</span></div>
-    <div class="bar"><span>雪山 solo</span><div class="track"><div class="fill" style="width:74.8%"></div></div><span class="v">312/417 · 589 g</span></div>
-    <div class="bar"><span>雪山 team</span><div class="track"><div class="fill team" style="width:85.9%"></div></div><span class="v">358/417 · 1,735 g</span></div>
-    <div class="bar"><span>攀岩 solo</span><div class="track"><div class="fill" style="width:75.0%"></div></div><span class="v">243/324 · 573 g</span></div>
-    <div class="bar"><span>攀岩 team</span><div class="track"><div class="fill team" style="width:86.1%"></div></div><span class="v">279/324 · 1,776 g</span></div>
-    <div class="bar"><span>溯溪 solo</span><div class="track"><div class="fill" style="width:75.7%"></div></div><span class="v">228/301 · 596 g</span></div>
-    <div class="bar"><span>溯溪 team</span><div class="track"><div class="fill team" style="width:86.0%"></div></div><span class="v">259/301 · 1,772 g</span></div>
+    <div class="bar"><span>登山 solo</span><div class="track"><div class="fill" style="width:75.6%"></div></div><span class="v">257/340 · 593 g</span></div>
+    <div class="bar"><span>登山 team</span><div class="track"><div class="fill team" style="width:85.9%"></div></div><span class="v">292/340 · 1,767 g</span></div>
+    <div class="bar"><span>雪山 solo</span><div class="track"><div class="fill" style="width:74.7%"></div></div><span class="v">307/411 · 588 g</span></div>
+    <div class="bar"><span>雪山 team</span><div class="track"><div class="fill team" style="width:86.6%"></div></div><span class="v">356/411 · 1,792 g</span></div>
+    <div class="bar"><span>攀岩 solo</span><div class="track"><div class="fill" style="width:76.2%"></div></div><span class="v">243/319 · 598 g</span></div>
+    <div class="bar"><span>攀岩 team</span><div class="track"><div class="fill team" style="width:85.9%"></div></div><span class="v">274/319 · 1,761 g</span></div>
+    <div class="bar"><span>溯溪 solo</span><div class="track"><div class="fill" style="width:75.3%"></div></div><span class="v">223/296 · 594 g</span></div>
+    <div class="bar"><span>溯溪 team</span><div class="track"><div class="fill team" style="width:86.1%"></div></div><span class="v">255/296 · 1,790 g</span></div>
   </div>
   <p class="muted">覆蓋率 = 已覆蓋的「傷病 × 技術」單位 ÷ 全部單位。重量從 600 g 加到 1,800 g（3 倍），覆蓋率只從約 75% 升到約 86%：便宜又高效的處置第一輪就裝進去了，剩下的多半是重而少用的設備。</p>
 </section>
@@ -321,7 +321,7 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
     <div class="eyebrow">怎麼維護</div>
     <h2>臨床覆核驅動資料，每一輪都留紀錄</h2>
   </div>
-  <p>資料不直接手改 CSV。每次調整都寫成一筆決策（目前編到 D94），由產生程式套用，再重跑 8 組回歸，逐組說明數字為什麼變。臨床判斷透過覆核頁收集：每一列可選同意、修改或討論並寫備註，裁決原文存檔備查。</p>
+  <p>資料不直接手改 CSV。每次調整都寫成一筆決策（目前編到 D96），由產生程式套用，再重跑 8 組回歸，逐組說明數字為什麼變。臨床判斷透過覆核頁收集：每一列可選同意、修改或討論並寫備註，裁決原文存檔備查。</p>
   <p>既有的技術與裝備編號一律不位移，刪除、合併、新增、改名都在編號完成之後才套用，舊紀錄永遠對得回來。</p>
 </section>
 
@@ -339,7 +339,7 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
 </section>
 
 <footer><a href="index.html" style="color:var(--pine);font-weight:700">開啟 EBEMKO 工具 →</a><br>
-  EBEMKO · 資料版本 D94（2026-10-17）· 參考：TCCC、PHTLS、ATLS 11th、WMS Practice Guidelines、ICAR MEDCOM、陳昱璁《行動醫療包整備》第 5 章
+  EBEMKO · 資料版本 D96（2026-10-17）· 參考：TCCC、PHTLS、ATLS 11th、WMS Practice Guidelines、ICAR MEDCOM、陳昱璁《行動醫療包整備》第 5 章
 </footer>
 
 </div>
