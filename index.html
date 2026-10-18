@@ -546,6 +546,17 @@ tbody tr:hover{background:var(--surface-2)}
 
     budget = upgrade(covered, spec, items, selected, qty, usedBy, lim.maxItem, budget);
 
+    // D98 補正(焜哥 2026-10-19):給液已覆蓋 → 同傷病的建路也算已覆蓋(器材含在給液內),但不另外計分,
+    //   避免畫面出現「有輸液、沒建路」。只影響顯示與覆蓋數,不影響挑選。
+    remaining = remaining.filter(function (u) {
+      var t = Object.keys(LINE_FOR).filter(function (k) {
+        return LINE_FOR[k] === u.technique_id && done[u.condition_id + "|" + k];
+      })[0];
+      if (!t || !gated(u)) return true;
+      covered.push(Object.assign({}, u, { tier: "Best", cost: 0, added: [], extra: [], no_score: true, via: t }));
+      return false;
+    });
+
     var skipped = b.skipped.slice();
     remaining.forEach(function (u) {
       if (gated(u)) {
@@ -576,7 +587,7 @@ tbody tr:hover{background:var(--surface-2)}
       total_g: total,
       units_total: b.units.length + b.skipped.length,
       units_covered: covered.length,
-      score_covered: covered.reduce(function (a, u) { return a + u.score; }, 0),
+      score_covered: covered.reduce(function (a, u) { return a + (u.no_score ? 0 : u.score); }, 0),
       method: perUnit ? "unit" : "bundle",
       conditions_total: Object.keys(conds).length,
       conditions_touched: Object.keys(condCovered).length,
