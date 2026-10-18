@@ -262,6 +262,10 @@ tbody tr:hover{background:var(--surface-2)}
   // D99:大出血覆蓋完先升級(守住 D83「solo 止血維持 Best」),但單次升級不可超過剩餘預算的 1/4,
   //   避免 482 g 的交界處止血帶在個人/小隊包吃掉大半重量。無上限任務(Infinity)不受限。
   var M_UPGRADE_CAP = 0.25;
+  // D100(焜哥 2026-10-19):多用途加分。新增的器材若同時填進其他「還沒覆蓋、裝了也還做不到」的處置的必需格位,
+  //   每個這樣的處置給它分數的 MULTI_USE 倍當作部分分數(只影響第一階段挑選的價值分數,不影響覆蓋數與覆蓋分數)。
+  //   目的:三角巾、彈繃、垃圾袋這類一物多用的器材,不會因為單一處置分數低而被低估。
+  var MULTI_USE = 0.2;
 
   /** D99 第二階段:已覆蓋的單位,用剩下的重量往上一層升級。
    *  每輪先挑大出血(M),再挑分數高的,同分挑新增重量少的;升到帶得動的最高層。
@@ -454,6 +458,24 @@ tbody tr:hover{background:var(--surface-2)}
     });
     return g;
   }
+  /** D100:add 裡的器材能填進多少「還做不到」的處置的必需格位 → 部分分數。 */
+  function multiUseGain(add, remaining, spec, items, selected, maxItem) {
+    var ids = {}; add.forEach(function (x) { ids[x.it.item_id] = true; });
+    var sel = Object.assign({}, selected, ids);
+    var g = 0;
+    remaining.forEach(function (v) {
+      var s = spec[v.technique_id] || {};
+      var fills = TIERS.some(function (tier) {
+        var t = s[tier];
+        return t && t.need.some(function (n) { return n.options.some(function (o) { return ids[o.item_id]; }); });
+      });
+      if (!fills) return;
+      var r = planUnit(v, spec, items, sel, maxItem, Infinity, CHEAP);
+      if (r.plan && r.plan.cost <= 0) return;           // 裝了就能做:已算在本單位或 bundle 裡
+      g += MULTI_USE * v.score;
+    });
+    return g;
+  }
   /** 裝了 add 之後本單位是否已經零成本(大多數情況是;concurrent 多帶一份時不是)。 */
   function coversSelf(u, add, spec, items, selected, maxItem) {
     var sel = Object.assign({}, selected);
@@ -505,18 +527,22 @@ tbody tr:hover{background:var(--surface-2)}
       return need && !need.some(function (t) { return done[u.condition_id + "|" + t]; });
     };
     while (remaining.length) {
-      var best = -1, bestPlan = null, bestEff = -1, bestStage = -1, bonusCache = {};
+      var best = -1, bestPlan = null, bestEff = -1, bestStage = -1, bonusCache = {}, multiCache = {};
       for (var i = 0; i < remaining.length; i++) {
         if (gated(remaining[i])) continue;
         var r = planUnit(remaining[i], spec, items, selected, lim.maxItem, budget, CHEAP);
         if (!r.plan) continue;
         var stage = FIRST_MODULES[remaining[i].module] ? 1 : 0;
         var gain = remaining[i].score;
-        if (r.plan.cost > 0 && !perUnit) {
+        if (r.plan.cost > 0) {
           var key = r.plan.add.map(function (x) { return x.it.item_id; }).sort().join(",");
-          if (!(key in bonusCache)) bonusCache[key] = bundleGain(r.plan.add, remaining, spec, items, selected, lim.maxItem);
-          gain = bonusCache[key];              // 本單位也在 remaining 裡,通常已算進去
-          if (!coversSelf(remaining[i], r.plan.add, spec, items, selected, lim.maxItem)) gain += remaining[i].score;
+          if (!perUnit) {
+            if (!(key in bonusCache)) bonusCache[key] = bundleGain(r.plan.add, remaining, spec, items, selected, lim.maxItem);
+            gain = bonusCache[key];              // 本單位也在 remaining 裡,通常已算進去
+            if (!coversSelf(remaining[i], r.plan.add, spec, items, selected, lim.maxItem)) gain += remaining[i].score;
+          }
+          if (!(key in multiCache)) multiCache[key] = multiUseGain(r.plan.add, remaining, spec, items, selected, lim.maxItem);
+          gain += multiCache[key];               // D100
         }
         var eff = r.plan.cost <= 0 ? Infinity : gain / r.plan.cost;
         if (stage > bestStage || (stage === bestStage && eff > bestEff)) {   // 同分取先排序者
