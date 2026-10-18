@@ -266,8 +266,9 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
   <ol class="steps">
     <li><b>拆成覆蓋單位</b><p>把「傷病 × 可處理它的技術」當成一個單位，分數 = 該傷病的嚴重度。登山有 23 種傷病，共 340 個單位。</p></li>
     <li><b>先排除做不到的</b><p>野外不可行、超過執行者權限、三層都沒有方案的技術，直接剔除，不佔重量。</p></li>
-    <li><b>每個單位找第一個帶得動的層</b><p>依 Best → Better → Basic 往下找。每一格先看包裡有沒有已經帶的品項可以共用；沒有就挑最輕、且不超過單件上限的那件。徒手層成本 0 g。</p></li>
-    <li><b>貪婪挑選</b><p>每一輪挑「效益 ÷ 新增重量」最高的單位裝進去，然後重算。效益有兩種算法：只算這一項處置，或算新增裝備能一起覆蓋的所有處置（例如一個垃圾袋同時撐起保暖與失溫防水打包）。兩種都跑，取覆蓋分數總和較高的結果。大出血（M）類先裝完，才輪其他類別。</p></li>
+    <li><b>第一階段：每個單位先用最省重量的層</b><p>在帶得動的層裡，選新增重量最少的那一層（同重取較高層），先求覆蓋。每一格先看包裡有沒有已經帶的品項可以共用；沒有就挑最輕、且不超過單件上限的那件。徒手層成本 0 g。</p></li>
+    <li><b>貪婪挑選</b><p>每一輪挑「效益 ÷ 新增重量」最高的單位裝進去，然後重算。效益有兩種算法：只算這一項處置，或算新增裝備能一起覆蓋的所有處置（例如一個垃圾袋同時撐起保暖與失溫防水打包）。兩種都跑，取覆蓋分數總和較高的結果。大出血（M）類先裝完並先升級，才輪其他類別；大出血單次升級不可超過剩餘重量的 1/4，避免 482 g 的交界處止血帶吃掉個人或小隊包的大半重量。</p></li>
+    <li><b>第二階段：剩下的重量拿來升級</b><p>已覆蓋的處置往 Better → Best 升級：先挑分數高的，同分挑新增重量少的，直到重量用完。升級不改變覆蓋數，只改善「用什麼做」——背得動就用 Best。</p></li>
     <li><b>IV 管路要有東西可打</b><p>建立靜脈管路本身不治療。給輸液時，建路器材算在給液裡；只有同一傷病有針劑可給，建路才另外計分，避免同一組器材拿兩次分。</p></li>
     <li><b>同時佔用就多帶一份</b><p>Better／Basic 層有些用品會被同一位傷患的兩個處置同時佔用（例如三角巾），這時多帶一份。</p></li>
     <li><b>預算用完或沒有單位裝得下就停</b><p>同分時依「分數 → 傷病編號 → 技術編號」固定排序，結果可重現。</p></li>
@@ -305,16 +306,16 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
   <div class="legend"><span>solo 600 g</span><span class="team">team 1,800 g</span></div>
   <div class="bars" role="img" aria-label="8 組情境覆蓋率長條圖">
     <div class="axis"><span></span><div><span>0%</span><span>50%</span><span>100%</span></div><span></span></div>
-    <div class="bar"><span>登山 solo</span><div class="track"><div class="fill" style="width:75.0%"></div></div><span class="v">255/340 · 591 g</span></div>
-    <div class="bar"><span>登山 team</span><div class="track"><div class="fill team" style="width:86.5%"></div></div><span class="v">294/340 · 1,708 g</span></div>
-    <div class="bar"><span>雪山 solo</span><div class="track"><div class="fill" style="width:74.7%"></div></div><span class="v">307/411 · 586 g</span></div>
-    <div class="bar"><span>雪山 team</span><div class="track"><div class="fill team" style="width:85.9%"></div></div><span class="v">353/411 · 1,792 g</span></div>
-    <div class="bar"><span>攀岩 solo</span><div class="track"><div class="fill" style="width:75.2%"></div></div><span class="v">240/319 · 598 g</span></div>
-    <div class="bar"><span>攀岩 team</span><div class="track"><div class="fill team" style="width:87.1%"></div></div><span class="v">278/319 · 1,762 g</span></div>
-    <div class="bar"><span>溯溪 solo</span><div class="track"><div class="fill" style="width:74.3%"></div></div><span class="v">220/296 · 594 g</span></div>
-    <div class="bar"><span>溯溪 team</span><div class="track"><div class="fill team" style="width:86.5%"></div></div><span class="v">256/296 · 1,702 g</span></div>
+    <div class="bar"><span>登山 solo</span><div class="track"><div class="fill" style="width:77.9%"></div></div><span class="v">265/340 · 598 g</span></div>
+    <div class="bar"><span>登山 team</span><div class="track"><div class="fill team" style="width:90.3%"></div></div><span class="v">307/340 · 1,791 g</span></div>
+    <div class="bar"><span>雪山 solo</span><div class="track"><div class="fill" style="width:77.6%"></div></div><span class="v">319/411 · 593 g</span></div>
+    <div class="bar"><span>雪山 team</span><div class="track"><div class="fill team" style="width:89.5%"></div></div><span class="v">368/411 · 1,796 g</span></div>
+    <div class="bar"><span>攀岩 solo</span><div class="track"><div class="fill" style="width:77.4%"></div></div><span class="v">247/319 · 592 g</span></div>
+    <div class="bar"><span>攀岩 team</span><div class="track"><div class="fill team" style="width:90.6%"></div></div><span class="v">289/319 · 1,800 g</span></div>
+    <div class="bar"><span>溯溪 solo</span><div class="track"><div class="fill" style="width:76.7%"></div></div><span class="v">227/296 · 592 g</span></div>
+    <div class="bar"><span>溯溪 team</span><div class="track"><div class="fill team" style="width:90.9%"></div></div><span class="v">269/296 · 1,795 g</span></div>
   </div>
-  <p class="muted">覆蓋率 = 已覆蓋的「傷病 × 技術」單位 ÷ 全部單位。重量從 600 g 加到 1,800 g（3 倍），覆蓋率只從約 75% 升到約 87%：便宜又高效的處置第一輪就裝進去了，剩下的多半是重而少用的設備。</p>
+  <p class="muted">覆蓋率 = 已覆蓋的「傷病 × 技術」單位 ÷ 全部單位。重量從 600 g 加到 1,800 g（3 倍），覆蓋率只從約 77% 升到約 90%：便宜又高效的處置第一輪就裝進去了，剩下的多半是重而少用的設備。</p>
 </section>
 
 <section>
@@ -322,7 +323,7 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
     <div class="eyebrow">怎麼維護</div>
     <h2>臨床覆核驅動資料，每一輪都留紀錄</h2>
   </div>
-  <p>資料不直接手改 CSV。每次調整都寫成一筆決策（目前編到 D98），由產生程式套用，再重跑 8 組回歸，逐組說明數字為什麼變。臨床判斷透過覆核頁收集：每一列可選同意、修改或討論並寫備註，裁決原文存檔備查。</p>
+  <p>資料不直接手改 CSV。每次調整都寫成一筆決策（目前編到 D99），由產生程式套用，再重跑 8 組回歸，逐組說明數字為什麼變。臨床判斷透過覆核頁收集：每一列可選同意、修改或討論並寫備註，裁決原文存檔備查。</p>
   <p>既有的技術與裝備編號一律不位移，刪除、合併、新增、改名都在編號完成之後才套用，舊紀錄永遠對得回來。</p>
 </section>
 
@@ -340,7 +341,7 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
 </section>
 
 <footer>
-  EBEMKO · 資料版本 D98（2026-10-19）· 參考：TCCC、PHTLS、ATLS 11th、WMS Practice Guidelines、ICAR MEDCOM、陳昱璁《行動醫療包整備》第 5 章
+  EBEMKO · 資料版本 D99（2026-10-19）· 參考：TCCC、PHTLS、ATLS 11th、WMS Practice Guidelines、ICAR MEDCOM、陳昱璁《行動醫療包整備》第 5 章
 </footer>
 
 </div>

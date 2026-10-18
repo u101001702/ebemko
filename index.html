@@ -258,6 +258,42 @@ tbody tr:hover{background:var(--surface-2)}
   //   D98(焜哥 2026-10-19):給液已含建路器材(LINE_FOR),建路若再因給液計分會重複算兩次;
   //   所以建路只在「有針劑可給」時另外計分,給液的建路就算在給液裡。
   var NEEDS_USE = { T407: ["T615"] };
+  var CHEAP = { cheapest: true };
+  // D99:大出血覆蓋完先升級(守住 D83「solo 止血維持 Best」),但單次升級不可超過剩餘預算的 1/4,
+  //   避免 482 g 的交界處止血帶在個人/小隊包吃掉大半重量。無上限任務(Infinity)不受限。
+  var M_UPGRADE_CAP = 0.25;
+
+  /** D99 第二階段:已覆蓋的單位,用剩下的重量往上一層升級。
+   *  每輪先挑大出血(M),再挑分數高的,同分挑新增重量少的;升到帶得動的最高層。
+   *  升級不改變覆蓋數,只改善「用什麼做」。回傳剩餘預算。 */
+  function upgrade(covered, spec, items, selected, qty, usedBy, maxItem, budget, onlyM) {
+    for (;;) {
+      var pick = -1, pickPlan = null, key = null;
+      for (var i = 0; i < covered.length; i++) {
+        var u = covered[i], k = TIERS.indexOf(u.tier);
+        if (k <= 0 || (onlyM && !FIRST_MODULES[u.module])) continue;
+        var r = planUnit(u, spec, items, selected, maxItem, budget, { tiers: TIERS.slice(0, k) });
+        if (!r.plan) continue;
+        if (onlyM && r.plan.cost > budget * M_UPGRADE_CAP) continue;
+        var kk = [FIRST_MODULES[u.module] ? 1 : 0, u.score, -r.plan.cost];
+        if (!key || kk[0] > key[0] || (kk[0] === key[0] && (kk[1] > key[1] || (kk[1] === key[1] && kk[2] > key[2])))) {
+          pick = i; pickPlan = r.plan; key = kk;
+        }
+      }
+      if (pick < 0) return budget;
+      var cu = covered[pick];
+      pickPlan.add.forEach(function (x) { selected[x.it.item_id] = true; });
+      pickPlan.add.concat(pickPlan.extra).forEach(function (x) {
+        qty[x.it.item_id] = (qty[x.it.item_id] || 0) + x.qty;
+        (usedBy[x.it.item_id] = usedBy[x.it.item_id] || []).push(cu.technique);
+      });
+      budget -= pickPlan.cost;
+      cu.upgraded_from = cu.upgraded_from || cu.tier;
+      cu.tier = pickPlan.tier;
+      cu.cost += pickPlan.cost;
+      cu.added = cu.added.concat(pickPlan.add.map(function (x) { return x.it.name; }));
+    }
+  }
   var LINE_FOR = { T408: "T407" };
 
   function severity(r) { return INC[r.incidence] + 2 * FAT[r.fatality]; }
@@ -367,12 +403,17 @@ tbody tr:hover{background:var(--surface-2)}
     return { add: ok[0] };
   }
 
-  /** 替一個單位規劃:回 {plan} 或 {blocked}。cost 隨已選裝備動態變化。 */
-  function planUnit(u, spec, items, selected, maxItem, budget) {
-    var blocked = [];
+  /** 替一個單位規劃:回 {plan} 或 {blocked}。cost 隨已選裝備動態變化。
+   *  how.cheapest:D99 第一階段,在帶得動的層裡選新增重量最少的(同重取較高層);
+   *               省略 = 依 Best → Better → Basic 選第一個帶得動的(舊做法,用於列出沒覆蓋的原因)
+   *  how.tiers:只看這幾層(D99 第二階段升級用) */
+  function planUnit(u, spec, items, selected, maxItem, budget, how) {
+    how = how || {};
+    var blocked = [], best = null;
     var s = spec[u.technique_id] || {};
-    for (var k = 0; k < TIERS.length; k++) {
-      var tier = TIERS[k], t = s[tier];
+    var order = how.tiers || TIERS;
+    for (var k = 0; k < order.length; k++) {
+      var tier = order[k], t = s[tier];
       if (!t) continue;
       var add = [], extra = [], heavy = [];
       t.need.forEach(function (n) {
@@ -395,9 +436,11 @@ tbody tr:hover{background:var(--surface-2)}
                        items: add.concat(extra).map(function (x) { return x.it.name + "(" + x.it.w + "g)"; }) });
         continue;
       }
-      return { plan: { tier: tier, add: add, extra: extra, cost: cost } };
+      var plan = { tier: tier, add: add, extra: extra, cost: cost };
+      if (!how.cheapest) return { plan: plan };
+      if (!best || cost < best.cost) best = plan;
     }
-    return { blocked: blocked };
+    return best ? { plan: best } : { blocked: blocked };
   }
 
   /** D96:把 add 裝進包之後,剩餘單位中新增重量變成 0 的分數總和。 */
@@ -406,7 +449,7 @@ tbody tr:hover{background:var(--surface-2)}
     add.forEach(function (x) { sel[x.it.item_id] = true; });
     var g = 0;
     remaining.forEach(function (v) {
-      var r = planUnit(v, spec, items, sel, maxItem, Infinity);
+      var r = planUnit(v, spec, items, sel, maxItem, Infinity, CHEAP);
       if (r.plan && r.plan.cost <= 0) g += v.score;
     });
     return g;
@@ -415,7 +458,7 @@ tbody tr:hover{background:var(--surface-2)}
   function coversSelf(u, add, spec, items, selected, maxItem) {
     var sel = Object.assign({}, selected);
     add.forEach(function (x) { sel[x.it.item_id] = true; });
-    var r = planUnit(u, spec, items, sel, maxItem, Infinity);
+    var r = planUnit(u, spec, items, sel, maxItem, Infinity, CHEAP);
     return !!(r.plan && r.plan.cost <= 0);
   }
 
@@ -456,7 +499,7 @@ tbody tr:hover{background:var(--surface-2)}
       return (y.score - x.score) || cmp(x.condition_id, y.condition_id) || cmp(x.technique_id, y.technique_id);
     });
 
-    var selected = {}, qty = {}, usedBy = {}, covered = [], budget = budget0, done = {};
+    var selected = {}, qty = {}, usedBy = {}, covered = [], budget = budget0, done = {}, mUpgraded = false;
     var gated = function (u) {                 // D97:沒有輸液或針劑可給,不建路
       var need = NEEDS_USE[u.technique_id];
       return need && !need.some(function (t) { return done[u.condition_id + "|" + t]; });
@@ -465,7 +508,7 @@ tbody tr:hover{background:var(--surface-2)}
       var best = -1, bestPlan = null, bestEff = -1, bestStage = -1, bonusCache = {};
       for (var i = 0; i < remaining.length; i++) {
         if (gated(remaining[i])) continue;
-        var r = planUnit(remaining[i], spec, items, selected, lim.maxItem, budget);
+        var r = planUnit(remaining[i], spec, items, selected, lim.maxItem, budget, CHEAP);
         if (!r.plan) continue;
         var stage = FIRST_MODULES[remaining[i].module] ? 1 : 0;
         var gain = remaining[i].score;
@@ -479,6 +522,11 @@ tbody tr:hover{background:var(--surface-2)}
         if (stage > bestStage || (stage === bestStage && eff > bestEff)) {   // 同分取先排序者
           best = i; bestPlan = r.plan; bestEff = eff; bestStage = stage;
         }
+      }
+      if (!mUpgraded && (best < 0 || bestStage === 0)) {   // D99:大出血都覆蓋了 → 先升級大出血
+        budget = upgrade(covered, spec, items, selected, qty, usedBy, lim.maxItem, budget, true);
+        mUpgraded = true;
+        continue;
       }
       if (best < 0) break;
       var u = remaining.splice(best, 1)[0];
@@ -495,6 +543,8 @@ tbody tr:hover{background:var(--surface-2)}
         extra: bestPlan.extra.map(function (x) { return x.it.name; }),
       }));
     }
+
+    budget = upgrade(covered, spec, items, selected, qty, usedBy, lim.maxItem, budget);
 
     var skipped = b.skipped.slice();
     remaining.forEach(function (u) {
