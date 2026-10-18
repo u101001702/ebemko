@@ -251,6 +251,14 @@ tbody tr:hover{background:var(--surface-2)}
   var FAT = { Y: 2, "部分Y": 1, N: 0 };
   var TIERS = ["Best", "Better", "Basic"];
   var FIRST_MODULES = { M: true };            // D83:先處理的模組
+  // D97(焜哥 2026-10-19):建立靜脈管路本身不治療,要有東西可打才有意義。
+  //   NEEDS_USE:同一傷病已覆蓋其中一項技術,建路才有資格裝包(否則不單獨計分)。
+  //   LINE_FOR:給液本身就要建路 → 建路的必需裝備併入給液的每一層。
+  //   簡易版:先寫死編號;之後若有更多條件式需求再改成資料表。
+  //   D98(焜哥 2026-10-19):給液已含建路器材(LINE_FOR),建路若再因給液計分會重複算兩次;
+  //   所以建路只在「有針劑可給」時另外計分,給液的建路就算在給液裡。
+  var NEEDS_USE = { T407: ["T615"] };
+  var LINE_FOR = { T408: "T407" };
 
   function severity(r) { return INC[r.incidence] + 2 * FAT[r.fatality]; }
 
@@ -334,6 +342,16 @@ tbody tr:hover{background:var(--surface-2)}
         var s = spec[t][tier];
         s.need.sort(function (a, b) { return a.slot - b.slot; });
         delete s.bySlot;
+      });
+    });
+    // D97:給液的每一層都要先建路(取建路 Best 層的必需裝備)
+    Object.keys(LINE_FOR).forEach(function (t) {
+      var line = (spec[LINE_FOR[t]] || {}).Best;
+      if (!line || !spec[t]) return;
+      Object.keys(spec[t]).forEach(function (tier) {
+        var s = spec[t][tier];
+        if (s.status !== "equipped") return;
+        line.need.forEach(function (n, k) { s.need.push({ slot: "L" + k, options: n.options }); });
       });
     });
     return spec;
@@ -438,10 +456,15 @@ tbody tr:hover{background:var(--surface-2)}
       return (y.score - x.score) || cmp(x.condition_id, y.condition_id) || cmp(x.technique_id, y.technique_id);
     });
 
-    var selected = {}, qty = {}, usedBy = {}, covered = [], budget = budget0;
+    var selected = {}, qty = {}, usedBy = {}, covered = [], budget = budget0, done = {};
+    var gated = function (u) {                 // D97:沒有輸液或針劑可給,不建路
+      var need = NEEDS_USE[u.technique_id];
+      return need && !need.some(function (t) { return done[u.condition_id + "|" + t]; });
+    };
     while (remaining.length) {
       var best = -1, bestPlan = null, bestEff = -1, bestStage = -1, bonusCache = {};
       for (var i = 0; i < remaining.length; i++) {
+        if (gated(remaining[i])) continue;
         var r = planUnit(remaining[i], spec, items, selected, lim.maxItem, budget);
         if (!r.plan) continue;
         var stage = FIRST_MODULES[remaining[i].module] ? 1 : 0;
@@ -465,6 +488,7 @@ tbody tr:hover{background:var(--surface-2)}
         (usedBy[x.it.item_id] = usedBy[x.it.item_id] || []).push(u.technique);
       });
       budget -= bestPlan.cost;
+      done[u.condition_id + "|" + u.technique_id] = true;
       covered.push(Object.assign({}, u, {
         tier: bestPlan.tier, cost: bestPlan.cost,
         added: bestPlan.add.map(function (x) { return x.it.name; }),
@@ -474,6 +498,11 @@ tbody tr:hover{background:var(--surface-2)}
 
     var skipped = b.skipped.slice();
     remaining.forEach(function (u) {
+      if (gated(u)) {
+        skipped.push(Object.assign({}, u, { reason: "沒有針劑可給(給液的建路已算在給液)", tier: "-",
+                                            blockers: NEEDS_USE[u.technique_id].slice() }));
+        return;
+      }
       var r = planUnit(u, spec, items, selected, lim.maxItem, budget);
       var first = (r.blocked && r.blocked[0]) || { tier: "-", reason: "無可用方案", items: [] };
       skipped.push(Object.assign({}, u, { reason: first.reason, tier: first.tier, blockers: first.items }));
