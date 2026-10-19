@@ -238,6 +238,8 @@ tbody tr:hover{background:var(--surface-2)}
  * 刻意修正:同分時以 (分數高 → 傷病編號 → 技術編號) 固定破平手,結果可重現。
  *
  * D83(焜哥 2026-10-09):**大出血(M)先處理**。M 類技術先依效益比裝完,才輪其他類別。
+ *   D102(焜哥 2026-10-19 審核):優先範圍縮小為「直接加壓、傷口填塞」兩項;止血帶、止血帶轉換、
+ *   交界處止血改與其他類別一起依效益比競爭。
  *   這是 MARCH 的第一條原則,適用整個 M 類,不是替止血帶開後門。
  *   ⚠️ 焜哥補充:止血帶在野外不是絕對必要(需要止血帶才能止血的肢體大出血不多見),
  *   保留壓迫、填塞止血的能力就足矣,止血帶不該當唯一指標。純效益比其實也保得住
@@ -250,7 +252,10 @@ tbody tr:hover{background:var(--surface-2)}
   var INC = { High: 3, Med: 2, Low: 1 };
   var FAT = { Y: 2, "部分Y": 1, N: 0 };
   var TIERS = ["Best", "Better", "Basic"];
-  var FIRST_MODULES = { M: true };            // D83:先處理的模組
+  var FIRST_TECHS = { T101: true, T102: true }; // D83 → D102:先處理的技術(直接加壓、傷口填塞)
+  function isFirst(u) { return !!FIRST_TECHS[u.technique_id]; }
+  // D102:某些層需要比技術本身更高的權限(同一技術分針劑層與口服層)。權限不足的層視為沒有。
+  var TIER_PROVIDER = { T606: { Best: "EMT-P" } };
   // D97(焜哥 2026-10-19):建立靜脈管路本身不治療,要有東西可打才有意義。
   //   NEEDS_USE:同一傷病已覆蓋其中一項技術,建路才有資格裝包(否則不單獨計分)。
   //   LINE_FOR:給液本身就要建路 → 建路的必需裝備併入給液的每一層。
@@ -259,27 +264,27 @@ tbody tr:hover{background:var(--surface-2)}
   //   所以建路只在「有針劑可給」時另外計分,給液的建路就算在給液裡。
   var NEEDS_USE = { T407: ["T615"] };
   var CHEAP = { cheapest: true };
-  // D99:大出血覆蓋完先升級(守住 D83「solo 止血維持 Best」),但單次升級不可超過剩餘預算的 1/4,
-  //   避免 482 g 的交界處止血帶在個人/小隊包吃掉大半重量。無上限任務(Infinity)不受限。
-  var M_UPGRADE_CAP = 0.25;
+  // D99:優先止血覆蓋完先升級(守住 D83「solo 止血維持 Best」),但單次升級不可超過剩餘預算的上限比例,
+  //   避免單件重器材在個人/小隊包吃掉大半重量。無上限任務(Infinity)不受限。D102:1/4 → 1/2。
+  var M_UPGRADE_CAP = 0.5;
   // D100(焜哥 2026-10-19):多用途加分。新增的器材若同時填進其他「還沒覆蓋、裝了也還做不到」的處置的必需格位,
   //   每個這樣的處置給它分數的 MULTI_USE 倍當作部分分數(只影響第一階段挑選的價值分數,不影響覆蓋數與覆蓋分數)。
   //   目的:三角巾、彈繃、垃圾袋這類一物多用的器材,不會因為單一處置分數低而被低估。
   var MULTI_USE = 0.2;
 
   /** D99 第二階段:已覆蓋的單位,用剩下的重量往上一層升級。
-   *  每輪先挑大出血(M),再挑分數高的,同分挑新增重量少的;升到帶得動的最高層。
+   *  每輪先挑優先止血(FIRST_TECHS),再挑分數高的,同分挑新增重量少的;升到帶得動的最高層。
    *  升級不改變覆蓋數,只改善「用什麼做」。回傳剩餘預算。 */
   function upgrade(covered, spec, items, selected, qty, usedBy, maxItem, budget, onlyM) {
     for (;;) {
       var pick = -1, pickPlan = null, key = null;
       for (var i = 0; i < covered.length; i++) {
         var u = covered[i], k = TIERS.indexOf(u.tier);
-        if (k <= 0 || (onlyM && !FIRST_MODULES[u.module])) continue;
+        if (k <= 0 || (onlyM && !isFirst(u))) continue;
         var r = planUnit(u, spec, items, selected, maxItem, budget, { tiers: TIERS.slice(0, k) });
         if (!r.plan) continue;
         if (onlyM && r.plan.cost > budget * M_UPGRADE_CAP) continue;
-        var kk = [FIRST_MODULES[u.module] ? 1 : 0, u.score, -r.plan.cost];
+        var kk = [isFirst(u) ? 1 : 0, u.score, -r.plan.cost];
         if (!key || kk[0] > key[0] || (kk[0] === key[0] && (kk[1] > key[1] || (kk[1] === key[1] && kk[2] > key[2])))) {
           pick = i; pickPlan = r.plan; key = kk;
         }
@@ -401,7 +406,7 @@ tbody tr:hover{background:var(--surface-2)}
   function pickOption(n, items, selected, maxItem) {
     var have = n.options.filter(function (o) { return selected[o.item_id]; })[0];
     if (have) return { have: have };
-    var ok = n.options.filter(function (o) { var w = items[o.item_id].w; return !(w > 0 && w >= maxItem); });
+    var ok = n.options.filter(function (o) { var w = items[o.item_id].w; return !(w > 0 && w > maxItem); });
     if (!ok.length) return { heavy: n.options };
     ok.sort(function (a, b) { return (items[a.item_id].w - items[b.item_id].w) || cmp(a.item_id, b.item_id); });
     return { add: ok[0] };
@@ -421,7 +426,7 @@ tbody tr:hover{background:var(--surface-2)}
       if (!t) continue;
       var add = [], extra = [], heavy = [];
       t.need.forEach(function (n) {
-        // ⚠️ 單件上限沿用舊系統 >=(archive optimizer _plan_unit),以利回歸對帳
+        // D102(焜哥審核):單件剛好等於上限可以帶(舊系統是 >=)
         var p = pickOption(n, items, selected, maxItem);
         if (p.heavy) p.heavy.forEach(function (o) { heavy.push(items[o.item_id]); });
         else if (p.add) add.push({ it: items[p.add.item_id], qty: p.add.qty });
@@ -517,6 +522,22 @@ tbody tr:hover{background:var(--surface-2)}
     });
     var spec = tierSpecs(data);
     var b = buildUnits(data, opts.activity, prank);
+    if (prank != null) {                       // D102:權限不足的層拿掉;全部層都拿掉 → 超出權限
+      var rank = {}; data.providers.forEach(function (x) { rank[x.name] = x.rank; });
+      Object.keys(TIER_PROVIDER).forEach(function (t) {
+        if (!spec[t]) return;
+        var s = Object.assign({}, spec[t]);
+        Object.keys(TIER_PROVIDER[t]).forEach(function (tier) { if (rank[TIER_PROVIDER[t][tier]] > prank) delete s[tier]; });
+        spec[t] = s;
+      });
+      b.units = b.units.filter(function (u) {
+        var t = TIER_PROVIDER[u.technique_id];
+        if (!t || Object.keys(spec[u.technique_id]).length) return true;
+        var need = Object.keys(t).map(function (k) { return t[k]; }).join("/");
+        b.skipped.push(Object.assign(u, { reason: "超出執行權限(需 " + need + ")", blockers: [] }));
+        return false;
+      });
+    }
     var remaining = b.units.slice().sort(function (x, y) {
       return (y.score - x.score) || cmp(x.condition_id, y.condition_id) || cmp(x.technique_id, y.technique_id);
     });
@@ -532,7 +553,7 @@ tbody tr:hover{background:var(--surface-2)}
         if (gated(remaining[i])) continue;
         var r = planUnit(remaining[i], spec, items, selected, lim.maxItem, budget, CHEAP);
         if (!r.plan) continue;
-        var stage = FIRST_MODULES[remaining[i].module] ? 1 : 0;
+        var stage = isFirst(remaining[i]) ? 1 : 0;
         var gain = remaining[i].score;
         if (r.plan.cost > 0) {
           var key = r.plan.add.map(function (x) { return x.it.item_id; }).sort().join(",");
@@ -549,7 +570,7 @@ tbody tr:hover{background:var(--surface-2)}
           best = i; bestPlan = r.plan; bestEff = eff; bestStage = stage;
         }
       }
-      if (!mUpgraded && (best < 0 || bestStage === 0)) {   // D99:大出血都覆蓋了 → 先升級大出血
+      if (!mUpgraded && (best < 0 || bestStage === 0)) {   // D99:優先止血都覆蓋了 → 先升級優先止血
         budget = upgrade(covered, spec, items, selected, qty, usedBy, lim.maxItem, budget, true);
         mUpgraded = true;
         continue;
@@ -1083,7 +1104,7 @@ tbody tr:hover{background:var(--surface-2)}
     ${gapBlock(r)}
     <div class="card">
       <h3 style="margin-top:0"><span class="mark">★</span> 風險覆蓋 <span class="faint" style="font-weight:400">${kit.length} 件 · ${g(r.total_g)}</span></h3>
-      <p class="faint" style="font-size:12.5px;margin:-4px 0 8px">大出血（M）類技術先裝，其餘依「效益 ÷ 新增重量」裝包；每項技術依 Best → Better → Basic 找帶得動的層。
+      <p class="faint" style="font-size:12.5px;margin:-4px 0 8px">直接加壓、傷口填塞先裝，其餘依「效益 ÷ 新增重量」裝包；每項技術依 Best → Better → Basic 找帶得動的層。
         效益有兩種算法：只算這一項處置，或算新增裝備能一起覆蓋的所有處置。兩種都跑，取覆蓋分數總和較高的
         （這次採用：<b>${r.method === 'bundle' ? '一起覆蓋計分' : '單項計分'}</b>，覆蓋分數 ${r.score_covered}）。</p>
       <div class="seg" style="margin-bottom:10px" role="group" aria-label="排列方式">
@@ -1222,5 +1243,4 @@ tbody tr:hover{background:var(--surface-2)}
   render();
 })();
 </script>
-
 </body></html>
