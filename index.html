@@ -254,6 +254,9 @@ tbody tr:hover{background:var(--surface-2)}
   var TIERS = ["Best", "Better", "Basic"];
   var FIRST_TECHS = { T101: true, T102: true }; // D83 → D102:先處理的技術(直接加壓、傷口填塞)
   function isFirst(u) { return !!FIRST_TECHS[u.technique_id]; }
+  // D103(焜哥 2026-10-19):壓迫、填塞覆蓋完,有剩餘重量就先加入止血帶,之後才升級壓迫、填塞(單次 ≤ 剩餘 1/2)。
+  var SECOND_TECHS = { T103: true };
+  function stageOf(u) { return isFirst(u) ? 2 : SECOND_TECHS[u.technique_id] ? 1 : 0; }
   // D102:某些層需要比技術本身更高的權限(同一技術分針劑層與口服層)。權限不足的層視為沒有。
   var TIER_PROVIDER = { T606: { Best: "EMT-P" } };
   // D97(焜哥 2026-10-19):建立靜脈管路本身不治療,要有東西可打才有意義。
@@ -553,7 +556,7 @@ tbody tr:hover{background:var(--surface-2)}
         if (gated(remaining[i])) continue;
         var r = planUnit(remaining[i], spec, items, selected, lim.maxItem, budget, CHEAP);
         if (!r.plan) continue;
-        var stage = isFirst(remaining[i]) ? 1 : 0;
+        var stage = stageOf(remaining[i]);
         var gain = remaining[i].score;
         if (r.plan.cost > 0) {
           var key = r.plan.add.map(function (x) { return x.it.item_id; }).sort().join(",");
@@ -570,7 +573,7 @@ tbody tr:hover{background:var(--surface-2)}
           best = i; bestPlan = r.plan; bestEff = eff; bestStage = stage;
         }
       }
-      if (!mUpgraded && (best < 0 || bestStage === 0)) {   // D99:優先止血都覆蓋了 → 先升級優先止血
+      if (!mUpgraded && (best < 0 || bestStage === 0)) {   // D99/D103:壓迫、填塞、止血帶都處理完 → 先升級壓迫、填塞
         budget = upgrade(covered, spec, items, selected, qty, usedBy, lim.maxItem, budget, true);
         mUpgraded = true;
         continue;
@@ -1104,7 +1107,7 @@ tbody tr:hover{background:var(--surface-2)}
     ${gapBlock(r)}
     <div class="card">
       <h3 style="margin-top:0"><span class="mark">★</span> 風險覆蓋 <span class="faint" style="font-weight:400">${kit.length} 件 · ${g(r.total_g)}</span></h3>
-      <p class="faint" style="font-size:12.5px;margin:-4px 0 8px">直接加壓、傷口填塞先裝，其餘依「效益 ÷ 新增重量」裝包；每項技術依 Best → Better → Basic 找帶得動的層。
+      <p class="faint" style="font-size:12.5px;margin:-4px 0 8px">直接加壓、傷口填塞先裝，有剩餘重量再先加止血帶，其餘依「效益 ÷ 新增重量」裝包；每項技術依 Best → Better → Basic 找帶得動的層。
         效益有兩種算法：只算這一項處置，或算新增裝備能一起覆蓋的所有處置。兩種都跑，取覆蓋分數總和較高的
         （這次採用：<b>${r.method === 'bundle' ? '一起覆蓋計分' : '單項計分'}</b>，覆蓋分數 ${r.score_covered}）。</p>
       <div class="seg" style="margin-bottom:10px" role="group" aria-label="排列方式">
