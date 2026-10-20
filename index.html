@@ -852,12 +852,8 @@ tbody tr:hover{background:var(--surface-2)}
     const rk = risks(a);
     const mi = median(rk.map(x => x.inc)), mf = median(rk.map(x => x.fat));
     rk.forEach(x => { x.q = x.inc > mi ? (x.fat > mf ? 'Q1' : 'Q2') : (x.fat > mf ? 'Q3' : 'Q4'); });
-    const demand = {};
-    rk.forEach(x => goalsOf(x.cid).forEach(gg => gg.techs.forEach(() => {
-      demand[gg.goal.module] = (demand[gg.goal.module] || 0) + x.score;
-    })));
     const srcs = new Set(D.findings.filter(f => f.activity_id === a).map(f => f.source_id));
-    return { rk, mi, mf, demand, nsrc: srcs.size };
+    return { rk, mi, mf, nsrc: srcs.size };
   }
 
   function pageEvidence() {
@@ -879,10 +875,6 @@ tbody tr:hover{background:var(--surface-2)}
     return `
     <h2>${esc(nm)} · 風險總覽</h2>
     <p class="sub">${d.rk.length} 種傷病 · 文獻支持 ${d.rk.length - nClin} · 臨床判定 ${nClin} · ${d.nsrc} 份來源</p>
-    <div class="stats">
-      ${Object.entries(d.demand).sort((a, b) => b[1] - a[1]).slice(0, 4)
-        .map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k} ${MODL[k] || ''} 處置需求分數</span></div>`).join('')}
-    </div>
     <div class="card">
       <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
         <div style="flex:1;min-width:min(300px,100%)">
