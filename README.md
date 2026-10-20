@@ -7,7 +7,6 @@ Evidence-Based Expedition Medical Kit Optimizer
 證據來自 38 個文獻與政府統計來源、147 筆文獻發現。
 
 - **工具**：<https://u101001702.github.io/ebemko/>（單一 HTML 檔，求解在瀏覽器內執行）
-- **專案介紹**：<https://u101001702.github.io/ebemko/about.html>（理念、資料庫架構、最佳化邏輯）
 
 ## 這是建議，不是處方
 
