@@ -494,13 +494,13 @@ tr.mine td{background:var(--accent-soft)}
     return spec;
   }
 
-  /** 一個 slot 要用哪件:已在包內的優先;否則挑最輕、不超過單件上限的(同重依 item_id)。 */
+  /** 一個 slot 要用哪件:已在包內的優先;否則挑「單重 × 份數」最輕、不超過單件上限的(同重依 item_id)。 */
   function pickOption(n, items, selected, maxItem) {
     var have = n.options.filter(function (o) { return selected[o.item_id]; })[0];
     if (have) return { have: have };
     var ok = n.options.filter(function (o) { var w = items[o.item_id].w; return !(w > 0 && w > maxItem); });
     if (!ok.length) return { heavy: n.options };
-    ok.sort(function (a, b) { return (items[a.item_id].w - items[b.item_id].w) || cmp(a.item_id, b.item_id); });
+    ok.sort(function (a, b) { return (items[a.item_id].w * a.qty - items[b.item_id].w * b.qty) || cmp(a.item_id, b.item_id); });  // D105:比較含份數的重量
     return { add: ok[0] };
   }
 
