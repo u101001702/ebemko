@@ -198,8 +198,58 @@ tbody tr:hover{background:var(--surface-2)}
 .sden{font-style:normal;color:var(--ink-faint);font-size:.92em}
 .squote{margin:7px 0 0;padding:8px 11px;border-left:2px solid var(--accent);background:var(--surface);border-radius:0 5px 5px 0;font-size:12.5px;line-height:1.6;color:var(--ink-soft);white-space:pre-wrap;word-break:break-word}
 .sfrom{margin-top:5px;font-size:11.5px;color:var(--ink-faint);word-break:break-all}
+/* ── 重要聲明:進站展開,可收合成最上方一行說明列(每次進站都重新展開) ── */
+[hidden]{display:none!important}
+.notice{background:var(--gap-soft);border-bottom:1px solid var(--gap);color:var(--ink)}
+.notice-in{max-width:1320px;margin:0 auto;padding:16px 20px 14px}
+.notice-hd{display:flex;align-items:center;gap:10px}
+.notice-hd h2{font-size:16.5px;margin:0;color:var(--gap);flex:1}
+.notice-x{border:0;background:none;color:var(--gap);font-size:20px;line-height:1;padding:4px 8px;border-radius:6px}
+.notice-x:hover{background:var(--surface)}
+.notice ol{margin:10px 0 0;padding-left:0;list-style:none;display:grid;gap:7px;font-size:13.5px;line-height:1.65;color:var(--ink-soft);max-width:110ch}
+.notice ol b{color:var(--ink)}
+.notice-ft{margin-top:12px}
+.notice-ok{border:1px solid var(--gap);background:var(--surface);color:var(--gap);border-radius:8px;padding:6px 14px;font-size:13.5px;font-weight:600}
+.notice-bar{display:flex;align-items:center;gap:8px;width:100%;border:0;background:var(--gap-soft);border-bottom:1px solid var(--gap);color:var(--gap);font-size:12.5px;padding:6px 20px;text-align:left}
+.notice-bar span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.notice-bar u{text-decoration:none;font-weight:600;white-space:nowrap}
+@media(max-width:560px){.notice-in{padding:14px 16px 12px}.notice-bar{padding:6px 16px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
+
+<section class="notice" id="notice" aria-labelledby="notice-title">
+  <div class="notice-in">
+    <div class="notice-hd">
+      <h2 id="notice-title">⚠ 重要聲明與模型限制</h2>
+      <button type="button" class="notice-x" id="notice-x" aria-label="關閉聲明，收合成說明列">×</button>
+    </div>
+    <ol>
+      <li><b>一、本系統結果僅供參考，不構成正式臨床指引、醫療建議或標準化裝備配置規範。</b> 實際醫療處置及裝備配置應依據最新證據、專業判斷、活動特性與現場條件決定。</li>
+      <li><b>二、文獻可能存在選擇偏差。</b> 現有研究多以需要救援或已啟動救援的事件為研究對象，可能低估未求救、未被通報或自行處理的輕傷事件。因此，研究中的傷病比例未必能代表所有活動參與者的實際傷病盛行率。</li>
+      <li><b>三、台灣本土資料仍有缺口。</b> 目前本系統所採用的攀岩與溯溪文獻缺乏台灣本土研究支持：攀岩資料主要引用歐美研究，溯溪資料主要引用歐洲 canyoning 研究。此外，台灣非雪季登山的相關統計資料亦有不足。不同地區的活動型態、環境與救援制度可能影響研究結果的適用性。</li>
+      <li><b>四、醫療器材的成本評估尚不完整。</b> 目前模型主要以重量作為器材成本維度，尚未納入體積、現場操作時間、人力需求及其他攜行與使用成本。因此，模型推薦結果不等同於整體裝備效率的最佳解。</li>
+      <li><b>五、醫療需求應納入整體裝備系統評估。</b> 野外活動的風險管理須整合個人防護裝備（PPE）、生存裝備與醫療器材，三者共同影響風險預防、傷病應對及生存能力。本系統的醫療器材建議應與整體裝備配置共同評估，不宜單獨解讀。</li>
+      <li><b>六、Severity Score 為探索性模型參數。</b> 目前模型以「發生風險分數＋死亡風險分數 × 2」作為嚴重度評分方式；其中死亡風險的加權係數 2 尚無直接實證依據，應視為模型假設，而非經驗證的臨床權重。</li>
+      <li><b>七、各研究結果尚未經統合分析。</b> 不同文獻的研究設計、族群、活動環境與結果定義可能存在異質性。本系統目前未對各研究結果進行正式的系統性回顧與統合分析（Meta-analysis），因此相關分數及推薦結果應視為依現有資料建立的初步估計，不代表已確認的風險排序或精確的醫療需求預測。</li>
+    </ol>
+    <div class="notice-ft"><button type="button" class="notice-ok" id="notice-ok">我已了解，收合</button></div>
+  </div>
+</section>
+<button type="button" class="notice-bar" id="notice-bar" aria-controls="notice" aria-expanded="false" hidden>
+  <span>⚠ 重要聲明：本系統結果僅供參考，不構成正式臨床指引、醫療建議或標準化裝備配置規範。</span><u>展開 ▾</u>
+</button>
+<script>
+(function () {
+  var box = document.getElementById("notice"), bar = document.getElementById("notice-bar");
+  function show(open) {
+    box.hidden = !open; bar.hidden = open; bar.setAttribute("aria-expanded", String(open));
+    (open ? document.getElementById("notice-ok") : bar).focus({ preventScroll: true });
+  }
+  document.getElementById("notice-x").onclick = function () { show(false); };
+  document.getElementById("notice-ok").onclick = function () { show(false); };
+  bar.onclick = function () { show(true); };
+})();
+</script>
 
 <header class="topbar">
   <div class="brand">EBEMKO<em>·</em>實證野外醫療包</div>
