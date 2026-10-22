@@ -215,7 +215,7 @@ tbody tr:hover{background:var(--surface-2)}
 .kin{color:var(--accent-ink);font-size:12px;white-space:nowrap}
 .kout{color:var(--gap);font-size:12px;white-space:nowrap}
 .legend{font-size:11.5px;margin:0 0 6px}
-.evd{margin-top:20px;border-top:1px solid var(--line);padding-top:12px}
+.evd{margin-top:12px;padding:10px 0 12px;border-bottom:1px solid var(--line)}
 .evd>summary{cursor:pointer;font-weight:600;color:var(--accent-ink);font-size:14px}
 .tier.used{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .backlist{display:none;width:auto;padding:6px 12px;font-size:13px;margin:0 0 12px}
@@ -1056,18 +1056,6 @@ tr.mine td{background:var(--accent-soft)}
         <h3 style="margin:0;font-size:19px;color:var(--ink)">${esc(c.name)}</h3>
         <p class="faint" style="font-size:12.5px;margin:3px 0 0">${qname(c.q)}（${qdesc(c.q)}）· 嚴重度 ${c.score} 分 · ${r.basis === 'clinical' ? '臨床判定' : '文獻支持'}</p></div>
         <button type="button" class="xbtn" data-cond="" title="收起" aria-label="收起">✕</button></div>
-      <h4 class="dpsec">現場該做什麼</h4>
-      <p class="faint" style="font-size:12.5px;margin:0 0 8px">依處置順序排列（現場 → 評估 → MARCH-PAWS → 後送）。每項技術後面是你的醫療包狀況：✓ 在包內、✗ 沒帶。</p>
-      ${sum ? `<p style="margin:0 0 12px;display:flex;gap:6px;flex-wrap:wrap">${sum}</p>` : ''}
-      <div class="goals">${gs.map(gg => `
-        <div class="goal"><div class="gh">
-          <span class="gn">${esc(gg.goal.name_zh)}</span><span class="gt ${esc(gg.goal.goal_type)}">${GTYPE[gg.goal.goal_type] || esc(gg.goal.goal_type)}</span></div>
-          ${techRuns(gg.techs).map((run, k) => `<div class="trun">
-            <div class="tlvl" title="同一欄是可以互相替代的做法；「進階」是前一欄做不到或不夠時才用">${k === 0 ? '基本' : '進階'}</div>
-            <div class="titems">${run.items.map(techRow).join('')}</div>
-          </div>`).join('') || '<div class="trun"><div></div><div class="faint">此傷病在這個目標底下沒有適用的技術</div></div>'}
-        </div>`).join('')}</div>
-      <button type="button" class="btn ghost" style="width:auto;padding:7px 14px;font-size:13px;margin-top:14px" data-gocap="${c.cid}">看每項技術的三種做法與完整裝備 →</button>
       <details class="evd">
         <summary>為什麼是這個分數？看證據（${fs.length} 份來源）</summary>
         <div class="figs" style="margin-top:12px">
@@ -1087,6 +1075,18 @@ tr.mine td{background:var(--accent-soft)}
             ${srcFinding(f)}</div>`;
         }).join('')}</div>` : `<p class="faint" style="font-size:13px">${r.basis === 'clinical' ? '臨床判定，沒有文獻來源。' : NR}</p>`}
       </details>
+      <h4 class="dpsec">現場該做什麼</h4>
+      <p class="faint" style="font-size:12.5px;margin:0 0 8px">依處置順序排列（現場 → 評估 → MARCH-PAWS → 後送）。每項技術後面是你的醫療包狀況：✓ 在包內、✗ 沒帶。</p>
+      ${sum ? `<p style="margin:0 0 12px;display:flex;gap:6px;flex-wrap:wrap">${sum}</p>` : ''}
+      <div class="goals">${gs.map(gg => `
+        <div class="goal"><div class="gh">
+          <span class="gn">${esc(gg.goal.name_zh)}</span><span class="gt ${esc(gg.goal.goal_type)}">${GTYPE[gg.goal.goal_type] || esc(gg.goal.goal_type)}</span></div>
+          ${techRuns(gg.techs).map((run, k) => `<div class="trun">
+            <div class="tlvl" title="同一欄是可以互相替代的做法；「進階」是前一欄做不到或不夠時才用">${k === 0 ? '基本' : '進階'}</div>
+            <div class="titems">${run.items.map(techRow).join('')}</div>
+          </div>`).join('') || '<div class="trun"><div></div><div class="faint">此傷病在這個目標底下沒有適用的技術</div></div>'}
+        </div>`).join('')}</div>
+      <button type="button" class="btn ghost" style="width:auto;padding:7px 14px;font-size:13px;margin-top:14px" data-gocap="${c.cid}">看每項技術的三種做法與完整裝備 →</button>
     </div>`;
   }
 
