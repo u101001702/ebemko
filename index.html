@@ -215,6 +215,11 @@ tbody tr:hover{background:var(--surface-2)}
 .exitem{display:inline-flex;align-items:center;gap:6px;padding:2px 4px 2px 10px;border-radius:20px;background:var(--gap-soft);color:var(--gap);border:1px dashed var(--gap)}
 .exitem button,.linkbtn{font:inherit;font-size:12px;border:0;background:var(--surface);color:var(--accent-ink);border-radius:20px;padding:1px 8px;cursor:pointer}
 .linkbtn{background:none;text-decoration:underline}
+.pinitem{background:var(--accent-soft);color:var(--accent-ink);border-color:var(--accent);border-style:solid}
+.pill.pin{background:var(--accent-soft);color:var(--accent-ink);border-color:var(--accent)}
+.pinbtn{font:inherit;font-size:11px;padding:1px 8px;margin-right:7px;border-radius:20px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink-faint);cursor:pointer;vertical-align:1px;white-space:nowrap}
+.pinbtn:hover,.pinbtn:focus-visible{border-color:var(--accent);color:var(--accent-ink)}
+.pinbtn[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 .exbox>.exlist:first-child{border:0;margin:0;padding:0}
 .stchip.lock{background:var(--surface-2);color:var(--ink-soft);border-color:var(--line-strong)}
 .stchip.field{background:#6d55bd18;color:var(--m-de);border-color:var(--m-de)}
@@ -569,7 +574,7 @@ tr.mine td{background:var(--accent-soft)}
         continue;
       }
       var cost = add.concat(extra).reduce(function (a, x) { return a + x.it.w * x.qty; }, 0);
-      if (cost > budget) {
+      if (cost > 0 && cost > budget) {           // 指定的裝備超重時 budget 會是負的:0 g 的做法仍可行
         blocked.push({ tier: tier, reason: "剩餘預算不足",
                        items: add.concat(extra).map(function (x) { return x.it.name + "(" + x.it.w + "g)"; }) });
         continue;
@@ -621,6 +626,7 @@ tr.mine td{background:var(--accent-soft)}
   /**
    * opts: {activity, mission, partySize, provider, budget, method, exclude}
    *   exclude = 使用者選「不帶」的 item_id 陣列(焜哥 2026-10-28)
+   *   include = 使用者指定「一定要帶」的 item_id 陣列:先放進包並扣重量(超過上限照樣帶,由畫面警告)
    *   method 省略 = 兩種計分都跑,取覆蓋分數總和高者(同分取較輕,再同取 unit)
    *          "unit"   = 效益只算本單位(D96 之前的做法)
    *          "bundle" = 效益算新增裝備能一起覆蓋的所有單位(D96)
@@ -651,7 +657,9 @@ tr.mine td{background:var(--accent-soft)}
                            w: i.weight_policy === "counted" ? i.weight_g : 0 };
     });
     var spec = tierSpecs(data);
-    excludeItems(spec, items, Object.keys(FIELD_NO_ITEMS), "野外不可行");
+    var pin = (opts.include || []).filter(function (id) { return items[id]; });
+    // D108:使用者指定一定要帶的,就不再當成野外不可行
+    excludeItems(spec, items, Object.keys(FIELD_NO_ITEMS).filter(function (id) { return pin.indexOf(id) < 0; }), "野外不可行");
     if (opts.exclude && opts.exclude.length) excludeItems(spec, items, opts.exclude);
     var b = buildUnits(data, opts.activity, prank);
     if (prank != null) {                       // D102:權限不足的層拿掉;全部層都拿掉 → 超出權限
@@ -675,6 +683,8 @@ tr.mine td{background:var(--accent-soft)}
     });
 
     var selected = {}, qty = {}, usedBy = {}, covered = [], budget = budget0, done = {}, mUpgraded = false;
+    // D107-B 焜哥 2026-10-28:一定要帶的先放進包、扣重量;之後用到它的技術都不用再花重量
+    pin.forEach(function (id) { selected[id] = true; qty[id] = 1; budget -= items[id].w; });
     var gated = function (u) {                 // D97:沒有輸液或針劑可給,不建路
       var need = NEEDS_USE[u.technique_id];
       return need && !need.some(function (t) { return done[u.condition_id + "|" + t]; });
@@ -749,9 +759,18 @@ tr.mine td{background:var(--accent-soft)}
     });
     skipped.sort(function (x, y) { return (y.score - x.score) || cmp(x.condition_id, y.condition_id) || cmp(x.technique_id, y.technique_id); });
 
+    pin.forEach(function (id) {                // 指定帶的裝備被拿來用時沒經過 add,從已覆蓋單位的層反查用途
+      var used = usedBy[id] = usedBy[id] || [];
+      covered.forEach(function (u) {
+        var t = (spec[u.technique_id] || {})[u.tier];
+        if (t && t.need.some(function (n) { return n.options.some(function (o) { return o.item_id === id; }); }) &&
+            used.indexOf(u.technique) < 0) used.push(u.technique);
+      });
+    });
     var kit = Object.keys(selected).sort().map(function (id) {
       var it = items[id], n = qty[id] || 1;
-      return { item_id: id, name: it.name, qty: n, unit_g: it.w, weight_g: it.w * n, used_by: usedBy[id] || [] };
+      return { item_id: id, name: it.name, qty: n, unit_g: it.w, weight_g: it.w * n, used_by: usedBy[id] || [],
+               pinned: pin.indexOf(id) >= 0 };
     });
     var total = kit.reduce(function (a, x) { return a + x.weight_g; }, 0);
 
@@ -793,7 +812,7 @@ tr.mine td{background:var(--accent-soft)}
   const S = {
     activity: null, mission: 'team', provider: '', weightLimit: null, partySize: 2,
     solved: null, page: 'mission',
-    exclude: [], diff: null,       // 焜哥 2026-10-28:第 5 頁「不帶」的 item_id;diff = 最近一次排除前後的比較
+    exclude: [], include: [], diff: null,   // 焜哥 2026-10-28:第 5 頁「不帶」、第 4 頁「一定要帶」的 item_id;diff = 最近一次變動前後的比較
     ui: { eqFilter: '', eqGroup: '', quadrant: null, selectedCond: null,
           techCond: null, selectedTech: null, techFilter: '', packView: 'march' },
   };
@@ -907,12 +926,14 @@ tr.mine td{background:var(--accent-soft)}
     if (!S.activity) return;
     setState({ diff: diff || null, solved: EBEMKO.solve(D, {
       activity: S.activity, mission: S.mission, partySize: S.mission === 'team' ? S.partySize : 1,
-      provider: S.provider, budget: S.weightLimit == null ? undefined : S.weightLimit, exclude: S.exclude }) });
+      provider: S.provider, budget: S.weightLimit == null ? undefined : S.weightLimit, exclude: S.exclude, include: S.include }) });
   }
-  /** 排除(或加回)裝備後重算,並記下前後差異給第 5 頁顯示 */
-  function resolveWith(exclude, label) {
+  /** 改「不帶／一定要帶」後重算,並記下前後差異給第 4、5 頁顯示。同一件只能在其中一邊(最後按的為準) */
+  function resolveWith(sets, label) {
     const a = S.solved;
-    S.exclude = exclude;
+    if (sets.exclude) { S.exclude = sets.exclude; S.include = S.include.filter(x => !S.exclude.includes(x)); }
+    if (sets.include) { S.include = sets.include; S.exclude = S.exclude.filter(x => !S.include.includes(x)); }
+    if (!a) return render();
     solve();
     if (!a || !label) return;
     const b = S.solved, wa = new Map(a.kit.map(k => [k.item_id, k])), wb = new Map(b.kit.map(k => [k.item_id, k]));
@@ -920,6 +941,8 @@ tr.mine td{background:var(--accent-soft)}
     const plus = b.kit.filter(k => k.weight_g > 0 && (!wa.has(k.item_id) || wa.get(k.item_id).qty < k.qty));
     setState({ diff: { label, minus, plus, a: [a.total_g, a.units_covered, a.score_covered], b: [b.total_g, b.units_covered, b.score_covered] } });
   }
+  // 拉條最右邊一格 = 無上限(焜哥 2026-10-28:給專業救援隊用);其餘 0.5–12 kg
+  const WL_INF = 12100, wlPos = w => w === Infinity || w > 12000 ? WL_INF : w, wlVal = v => v >= WL_INF ? Infinity : v;
   const autoLimit = () => EBEMKO.missionLimits(D, S.mission, S.mission === 'team' ? S.partySize : 1).total;
 
   // ═══════════════════════════ Page 1 · 任務設定 ═══════════════════════════
@@ -970,16 +993,13 @@ tr.mine td{background:var(--accent-soft)}
 
     <div class="card">
       <h3 style="margin-top:0">④ 你背得動多少？</h3>
-      <label style="font-size:13.5px;display:flex;align-items:center;gap:7px;margin-bottom:9px">
-        <input type="checkbox" id="autow" ${S.weightLimit == null ? 'checked' : ''}>
-        使用此任務型態的預設上限${auto === Infinity ? '（無門檻）' : `（${g(auto)}）`}</label>
-      ${S.weightLimit != null ? `
-      <input type="range" class="slider" id="wl" min="500" max="12000" step="100" value="${S.weightLimit}" aria-label="重量上限">
+      <p class="faint" style="font-size:12.5px;margin:-4px 0 9px">此任務型態的預設上限：${auto === Infinity ? '無上限' : g(auto)}。拉動拉條可以調整。</p>
+      <input type="range" class="slider" id="wl" min="500" max="${WL_INF}" step="100" value="${wlPos(S.weightLimit != null ? S.weightLimit : auto)}" aria-label="重量上限">
       <div style="display:flex;justify-content:space-between;align-items:baseline">
         <span class="faint" style="font-size:12.5px">0.5 kg</span>
-        <span class="bigw" id="wlv">${g(S.weightLimit)}</span>
-        <span class="faint" style="font-size:12.5px">12 kg</span>
-      </div>` : ''}
+        <span class="bigw" id="wlv">${g(S.weightLimit != null ? S.weightLimit : auto)}</span>
+        <span class="faint" style="font-size:12.5px">無上限 ▸</span>
+      </div>
       <p class="faint" style="font-size:12.5px;margin:9px 0 0">
         ⚖️ 這個上限只算<b>醫療包</b>。睡袋、坐墊、爐具與燃料、頭燈、繩索、背包、登山杖等
         登山本來就會帶的共用裝備，借來做即造用途時<b>邊際重量記 0</b>，不佔這個額度。藥品照常計重：口服藥每項以 2 g 計、針劑每項 15 g。</p>
@@ -1276,7 +1296,9 @@ tr.mine td{background:var(--accent-soft)}
     return `
     <h2>裝備瀏覽</h2>
     <p class="sub">共 ${D.items.length} 件。每件都標了重量的可信度：「估計值」還沒實際秤過，不要當成量過的數字。<br>
-      即造材料與登山共用品<b>不計重</b>，進到醫療包也不佔額度；藥品照常計重（口服 2 g、針劑 15 g）。</p>
+      即造材料與登山共用品<b>不計重</b>，進到醫療包也不佔額度；藥品照常計重（口服 2 g、針劑 15 g）。<br>
+      按「📌 一定要帶」，這件會先放進醫療包、扣掉重量，剩下的重量再交給系統配其他東西。</p>
+    ${S.solved ? diffBlock() : ''}
     <div class="card">
       <input class="searchbox" id="eqq" placeholder="搜尋裝備（中英文）…" value="${esc(S.ui.eqFilter)}" aria-label="搜尋裝備">
       ${inKit ? `<div class="seg" style="margin-bottom:8px" role="group" aria-label="範圍">
@@ -1290,7 +1312,7 @@ tr.mine td{background:var(--accent-soft)}
         ${list.map(e => { const u = [...(USED[e.item_id] || [])].map(t => TECH[t] ? TECH[t].name_zh : t), k = inKit && inKit.get(e.item_id);
           const [cl, cc] = CONF[e.weight_confidence] || ['', ''];
           return `<tr${k ? ' class="mine"' : ''}>
-          <td data-l="裝備"><b class="eqn">${esc(e.name_zh)}</b>${k ? `<span class="pill ok">✓ 在包內${k.qty > 1 ? ' ×' + k.qty : ''}</span>` : ''}${FIELDNO[e.item_id] ? `<span class="pill" title="${esc(FIELDNO[e.item_id])}">⤴ 野外不可行</span>` : ''}
+          <td data-l="裝備"><button type="button" class="pinbtn" data-pin="${e.item_id}" aria-pressed="${S.include.includes(e.item_id)}" title="${S.include.includes(e.item_id) ? '取消指定' : '不論優化器怎麼算，這件一定放進醫療包'}">📌 ${S.include.includes(e.item_id) ? '已指定' : '一定要帶'}</button><b class="eqn">${esc(e.name_zh)}</b>${S.exclude.includes(e.item_id) ? '<span class="pill">⊘ 你選擇不帶</span>' : ''}${k ? `<span class="pill ok">✓ 在包內${k.qty > 1 ? ' ×' + k.qty : ''}</span>` : ''}${FIELDNO[e.item_id] ? `<span class="pill" title="${esc(FIELDNO[e.item_id])}">⤴ 野外不可行</span>` : ''}
             ${e.name_en && e.name_en !== e.name_zh ? `<br><span class="faint" style="font-size:11.5px">${esc(e.name_en)}</span>` : ''}</td>
           <td data-l="分類" style="white-space:nowrap">${esc(e.group)}</td>
           <td data-l="重量" class="w">${counted(e) ? g(e.weight_g) : '<span class="faint">不計重</span>'}</td>
@@ -1330,9 +1352,10 @@ tr.mine td{background:var(--accent-soft)}
     const kit = r.kit.filter(k => k.weight_g > 0), free = r.kit.filter(k => k.weight_g === 0);
     const lowc = kit.filter(k => ITEM[k.item_id].weight_confidence === 'low').length;
     const grouped = GROUPS.map(gn => [gn, kit.filter(k => ITEM[k.item_id].group === gn)]).filter(([, xs]) => xs.length);
-    const row = k => { const used = [...new Set(k.used_by)]; return `<tr><td><button type="button" class="noitem" data-noitem="${k.item_id}" title="不帶這件，看看會換成什麼" aria-label="不帶 ${esc(k.name)}">✕ 不帶</button>${esc(k.name)}${k.qty > 1
+    const pinOnly = kit.filter(k => k.pinned && !k.used_by.length);
+    const row = k => { const used = [...new Set(k.used_by)]; return `<tr><td><button type="button" class="noitem" data-noitem="${k.item_id}" title="不帶這件，看看會換成什麼" aria-label="不帶 ${esc(k.name)}">✕ 不帶</button>${esc(k.name)}${k.pinned ? '<span class="pill pin">📌 你指定的</span>' : ''}${k.qty > 1
         ? `<span class="pill warn" title="被多個技術同時需要，故帶 ${k.qty} 份">×${k.qty} 份</span>` : ''}
-        <br><span class="faint" style="font-size:11.5px">${esc(used.slice(0, 4).join('、'))}${used.length > 4 ? ` 等 ${used.length} 項` : ''}</span></td>
+        <br><span class="faint" style="font-size:11.5px">${used.length ? esc(used.slice(0, 4).join('、')) + (used.length > 4 ? ` 等 ${used.length} 項` : '') : k.pinned ? '目前沒有技術用到（可能超出你的證照等級），照你的指定帶上' : ''}</span></td>
       <td class="w">${g(k.weight_g)}${k.qty > 1 ? `<br><span class="faint" style="font-size:11px">${g(k.unit_g)} × ${k.qty}</span>` : ''}</td></tr>`; };
     const nm = (ACTL[r.input.activity] || ['', r.input.activity])[1];
     return `
@@ -1345,6 +1368,7 @@ tr.mine td{background:var(--accent-soft)}
       <div class="stat"><b>${lowc}</b><span>件重量為估計值</span></div>
     </div>
     ${r.total_g > 5000 ? `<div class="banner warn">⚠️ 總重 ${(r.total_g / 1000).toFixed(1)} kg，需要多人分揹。</div>` : ''}
+    ${overPin(r)}
     ${diffBlock()}
     <div class="card">
       <h3 style="margin-top:0"><span class="mark">★</span> 裝備清單 <span class="faint" style="font-weight:400">${kit.length} 件 · ${g(r.total_g)}</span></h3>
@@ -1360,7 +1384,7 @@ tr.mine td{background:var(--accent-soft)}
       <div class="tblwrap"><table><tbody>${marchGroups(r, kit).map(({ m, label, goals, sub }) =>
         `<tr><td colspan="2" style="background:var(--accent-soft);font-size:12.5px;font-weight:700;color:var(--accent-ink)">${m} ${label} <span style="font-weight:400">${g(sub)}</span></td></tr>`
         + goals.map(([gid, xs]) => `<tr><td colspan="2" style="background:var(--surface-2);font-size:11.5px;font-weight:700;color:var(--ink-faint)">${esc(GOAL[gid] ? GOAL[gid].name_zh : gid)}</td></tr>`
-          + xs.map(row).join('')).join('')).join('')}</tbody></table></div>`}
+          + xs.map(row).join('')).join('')).join('')}${pinOnly.length ? `<tr><td colspan="2" style="background:var(--accent-soft);font-size:12.5px;font-weight:700;color:var(--accent-ink)">📌 你指定、但沒有技術用到 <span style="font-weight:400">${g(pinOnly.reduce((a, k) => a + k.weight_g, 0))}</span></td></tr>` + pinOnly.map(row).join('') : ''}</tbody></table></div>`}
       ${free.length ? `<p class="faint" style="font-size:12.5px;margin:12px 0 0"><b>不計重</b>（隨身或登山共用品）：${esc(free.map(k => k.name).join('、'))}</p>` : ''}
       <p class="faint" style="font-size:12px;margin:8px 0 0">⚖️ 總重只算醫療包裡的東西。口服藥每項以 2 g 計、針劑每項 15 g；睡袋、衣物、頭燈、繩索、登山杖等登山本來就會帶的共用裝備，借來做即造用途時記 0 g。</p>
     </div>
@@ -1372,10 +1396,17 @@ tr.mine td{background:var(--accent-soft)}
     ${gapBlock(r)}`;
   }
 
-  /** 第 5 頁:最近一次「不帶／加回」的前後比較 + 已排除清單 */
+  /** 指定的裝備加起來就超過上限 → 警告(照樣帶,不偷偷拿掉) */
+  function overPin(r) {
+    const pins = r.kit.filter(k => k.pinned), w = pins.reduce((a, k) => a + k.weight_g, 0);
+    const big = pins.filter(k => k.unit_g > r.input.max_item_g);
+    return (w > r.input.budget ? `<div class="banner warn">⚠️ 你指定一定要帶的裝備合計 ${g(w)}，已經超過上限 ${g(r.input.budget)}，系統照樣帶上，但沒有空間放其他東西了。</div>` : '')
+      + (big.length ? `<div class="banner warn">⚠️ ${esc(big.map(k => k.name).join('、'))} 單件超過這個任務型態的單件上限 ${g(r.input.max_item_g)}，照你的指定帶上。</div>` : '');
+  }
+  /** 第 4、5 頁:最近一次「不帶／加回／指定」的前後比較 + 已排除、已指定清單 */
   function diffBlock() {
-    const d = S.diff, ex = S.exclude;
-    if (!d && !ex.length) return '';
+    const d = S.diff, ex = S.exclude, inc = S.include;
+    if (!d && !ex.length && !inc.length) return '';
     const nm = k => `${esc(k.name)} ${g(k.weight_g)}`, sign = v => v > 0 ? `+${v}` : `${v}`;
     const delta = d ? [d.b[0] - d.a[0], d.b[1] - d.a[1], d.b[2] - d.a[2]] : null;
     return `<div class="card exbox">
@@ -1390,6 +1421,8 @@ tr.mine td{background:var(--accent-soft)}
         <span>覆蓋分數 ${d.a[2]} → <b>${d.b[2]}</b>（${sign(delta[2])}）</span></p>` : ''}
       ${ex.length ? `<div class="exlist"><span class="faint">你選擇不帶：</span>${ex.map(id => `<span class="exitem">${esc(ITEM[id].name_zh)}<button type="button" data-restore="${id}" aria-label="加回 ${esc(ITEM[id].name_zh)}">加回</button></span>`).join('')}
         ${ex.length > 1 ? '<button type="button" class="linkbtn" data-restore="*">全部加回</button>' : ''}</div>` : ''}
+      ${inc.length ? `<div class="exlist"><span class="faint">你指定一定要帶：</span>${inc.map(id => `<span class="exitem pinitem">📌 ${esc(ITEM[id].name_zh)}<button type="button" data-pin="${id}" aria-label="取消指定 ${esc(ITEM[id].name_zh)}">取消</button></span>`).join('')}
+        ${inc.length > 1 ? '<button type="button" class="linkbtn" data-unpin="1">全部取消</button>' : ''}</div>` : ''}
     </div>`;
   }
 
@@ -1452,7 +1485,7 @@ tr.mine td{background:var(--accent-soft)}
   function goto(page) { setState({ page }); window.scrollTo({ top: 0 }); }
 
   document.addEventListener('click', e => {
-    const t = e.target.closest('[data-act],[data-mis],[data-prov],[data-party],[data-page],[data-goto],[data-grp],[data-q],[data-cond],[data-tech],[data-tcond],[data-gocap],[data-addw],[data-pack],[data-tgap],[data-mine],[data-backlist],[data-noitem],[data-restore],#gen,#copy,#themebtn');
+    const t = e.target.closest('[data-act],[data-mis],[data-prov],[data-party],[data-page],[data-goto],[data-grp],[data-q],[data-cond],[data-tech],[data-tcond],[data-gocap],[data-addw],[data-pack],[data-tgap],[data-mine],[data-backlist],[data-noitem],[data-restore],[data-pin],[data-unpin],#gen,#copy,#themebtn');
     if (!t) return;
     const d = t.dataset;
     if (d.act !== undefined) setState({ activity: d.act, solved: null, ui: { ...S.ui, selectedCond: null, techCond: null, selectedTech: null } });
@@ -1465,11 +1498,16 @@ tr.mine td{background:var(--accent-soft)}
       setState({ ui: { ...S.ui, selectedTech: d.tech } });
       const el = $('#techdetail'); if (el && innerWidth <= 820) el.scrollIntoView({ block: 'start' });
     }
-    else if (d.noitem) resolveWith(S.exclude.concat(d.noitem), `不帶「${ITEM[d.noitem].name_zh}」之後`);
+    else if (d.noitem) resolveWith({ exclude: S.exclude.concat(d.noitem) }, `不帶「${ITEM[d.noitem].name_zh}」之後`);
     else if (d.restore) {
       const all = d.restore === '*';
-      resolveWith(all ? [] : S.exclude.filter(x => x !== d.restore), all ? '全部加回之後' : `加回「${ITEM[d.restore].name_zh}」之後`);
+      resolveWith({ exclude: all ? [] : S.exclude.filter(x => x !== d.restore) }, all ? '全部加回之後' : `加回「${ITEM[d.restore].name_zh}」之後`);
     }
+    else if (d.pin) {
+      const on = S.include.includes(d.pin), nm = ITEM[d.pin].name_zh;
+      resolveWith({ include: on ? S.include.filter(x => x !== d.pin) : S.include.concat(d.pin) }, on ? `取消指定「${nm}」之後` : `指定一定要帶「${nm}」之後`);
+    }
+    else if (d.unpin) resolveWith({ include: [] }, '取消全部指定之後');
     else if (d.backlist) { const el = $('#techwrap'); if (el) el.scrollIntoView({ block: 'start' }); }
     else if (d.tgap !== undefined) setState({ ui: { ...S.ui, techGap: !!d.tgap } });
     else if (d.mine !== undefined) setState({ ui: { ...S.ui, eqMine: !!d.mine } });
@@ -1497,17 +1535,12 @@ tr.mine td{background:var(--accent-soft)}
     }
   });
   document.addEventListener('input', e => {
-    if (e.target.id === 'wl') { S.weightLimit = +e.target.value; const v = $('#wlv'); if (v) v.textContent = g(S.weightLimit); }
+    if (e.target.id === 'wl') { S.weightLimit = wlVal(+e.target.value); const v = $('#wlv'); if (v) v.textContent = g(S.weightLimit); }
     else if (e.target.id === 'techq') setState({ ui: { ...S.ui, techFilter: e.target.value } });
     else if (e.target.id === 'eqq') setState({ ui: { ...S.ui, eqFilter: e.target.value } });
   });
   document.addEventListener('change', e => {
     if (e.target.id === 'wl') { if (S.solved) solve(); else render(); }
-    else if (e.target.id === 'autow') {
-      const a = autoLimit();
-      setState({ weightLimit: e.target.checked ? null : (a === Infinity ? 5000 : a) });
-      if (S.solved) solve();
-    }
   });
 
   // 散布圖 hover tooltip(沿用舊版:不用 SVG <title>,手機看不到)
