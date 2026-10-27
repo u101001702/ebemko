@@ -201,6 +201,21 @@ tbody tr:hover{background:var(--surface-2)}
 .stchip{display:inline-flex;align-items:center;gap:3px;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:20px;white-space:nowrap;background:var(--surface-2);color:var(--ink-faint);border:1px solid var(--line)}
 .stchip.ok{background:var(--accent-soft);color:var(--accent-ink);border-color:var(--accent)}
 .stchip.weight{background:var(--gap-soft);color:var(--gap);border-color:var(--gap)}
+.stchip.excl{background:var(--surface-2);color:var(--gap);border-color:var(--gap);border-style:dashed}
+.noitem{font:inherit;font-size:11px;padding:1px 7px;margin-right:7px;border-radius:20px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink-faint);cursor:pointer;vertical-align:1px}
+.noitem:hover,.noitem:focus-visible{border-color:var(--gap);color:var(--gap)}
+.exbox{border-color:var(--accent)}
+.exdiff{display:flex;flex-wrap:wrap;gap:10px 28px;font-size:13.5px}
+.exdiff>div{display:flex;flex-direction:column;gap:3px}
+.explus b{color:var(--accent-ink)}.explus span{color:var(--accent-ink)}
+.exminus b{color:var(--gap)}.exminus span{color:var(--gap)}
+.exnum{font-size:13px;margin:10px 0 0;color:var(--ink-soft);display:flex;flex-wrap:wrap;gap:2px 18px}
+.exnum span{white-space:nowrap}
+.exlist{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.exitem{display:inline-flex;align-items:center;gap:6px;padding:2px 4px 2px 10px;border-radius:20px;background:var(--gap-soft);color:var(--gap);border:1px dashed var(--gap)}
+.exitem button,.linkbtn{font:inherit;font-size:12px;border:0;background:var(--surface);color:var(--accent-ink);border-radius:20px;padding:1px 8px;cursor:pointer}
+.linkbtn{background:none;text-decoration:underline}
+.exbox>.exlist:first-child{border:0;margin:0;padding:0}
 .stchip.lock{background:var(--surface-2);color:var(--ink-soft);border-color:var(--line-strong)}
 .stchip.field{background:#6d55bd18;color:var(--m-de);border-color:var(--m-de)}
 .sti{flex:none;width:1.3em;text-align:center;font-weight:700;color:var(--ink-faint)}
@@ -494,6 +509,22 @@ tr.mine td{background:var(--accent-soft)}
     return spec;
   }
 
+  /** 焜哥 2026-10-28:使用者選「不帶」的裝備從每一格的選項拿掉;某格沒有選項可用 → 那一層做不到(標 excluded)。 */
+  function excludeItems(spec, items, ids) {
+    var ex = {}; ids.forEach(function (id) { ex[id] = true; });
+    Object.keys(spec).forEach(function (t) {
+      Object.keys(spec[t]).forEach(function (tier) {
+        var s = spec[t][tier];
+        s.need.forEach(function (n) {
+          var left = n.options.filter(function (o) { return !ex[o.item_id]; });
+          if (left.length === n.options.length) return;
+          if (!left.length) s.excluded = (s.excluded || []).concat(n.options.map(function (o) { return items[o.item_id].name; }));
+          n.options = left;
+        });
+      });
+    });
+  }
+
   /** 一個 slot 要用哪件:已在包內的優先;否則挑「單重 × 份數」最輕、不超過單件上限的(同重依 item_id)。 */
   function pickOption(n, items, selected, maxItem) {
     var have = n.options.filter(function (o) { return selected[o.item_id]; })[0];
@@ -516,6 +547,7 @@ tr.mine td{background:var(--accent-soft)}
     for (var k = 0; k < order.length; k++) {
       var tier = order[k], t = s[tier];
       if (!t) continue;
+      if (t.excluded) { blocked.push({ tier: tier, reason: "你選擇不帶", items: t.excluded }); continue; }
       var add = [], extra = [], heavy = [];
       t.need.forEach(function (n) {
         // D102(焜哥審核):單件剛好等於上限可以帶(舊系統是 >=)
@@ -582,7 +614,8 @@ tr.mine td{background:var(--accent-soft)}
   }
 
   /**
-   * opts: {activity, mission, partySize, provider, budget, method}
+   * opts: {activity, mission, partySize, provider, budget, method, exclude}
+   *   exclude = 使用者選「不帶」的 item_id 陣列(焜哥 2026-10-28)
    *   method 省略 = 兩種計分都跑,取覆蓋分數總和高者(同分取較輕,再同取 unit)
    *          "unit"   = 效益只算本單位(D96 之前的做法)
    *          "bundle" = 效益算新增裝備能一起覆蓋的所有單位(D96)
@@ -613,6 +646,7 @@ tr.mine td{background:var(--accent-soft)}
                            w: i.weight_policy === "counted" ? i.weight_g : 0 };
     });
     var spec = tierSpecs(data);
+    if (opts.exclude && opts.exclude.length) excludeItems(spec, items, opts.exclude);
     var b = buildUnits(data, opts.activity, prank);
     if (prank != null) {                       // D102:權限不足的層拿掉;全部層都拿掉 → 超出權限
       var rank = {}; data.providers.forEach(function (x) { rank[x.name] = x.rank; });
@@ -753,6 +787,7 @@ tr.mine td{background:var(--accent-soft)}
   const S = {
     activity: null, mission: 'team', provider: '', weightLimit: null, partySize: 2,
     solved: null, page: 'mission',
+    exclude: [], diff: null,       // 焜哥 2026-10-28:第 5 頁「不帶」的 item_id;diff = 最近一次排除前後的比較
     ui: { eqFilter: '', eqGroup: '', quadrant: null, selectedCond: null,
           techCond: null, selectedTech: null, techFilter: '', packView: 'march' },
   };
@@ -819,15 +854,16 @@ tr.mine td{background:var(--accent-soft)}
     if (why.startsWith('超出執行權限')) return { k: 'lock', u, label: `需 ${plabel(TECH[tid].provider_level)}，你選的是 ${plabel(S.provider)}` };
     if (why === '野外不可行' || why.startsWith('三層都沒方案')) return { k: 'field', u, label: '野外無法執行，需後送' };
     if (why.startsWith('沒有針劑')) return { k: 'skip', u, label: '沒有針劑要打，不需建路' };
+    if (why === '你選擇不帶') return { k: 'excl', u, label: '你選擇不帶：' + u.blockers.join('、') };
     if (why === '單件超過任務上限') return { k: 'weight', u, label: '單件超過上限：' + u.blockers.join('、') };
     return { k: 'weight', u, label: '重量不夠，沒帶' + (u.blockers.length ? '：' + u.blockers.join('、') : '') };
   }
   /** 技術在一群傷病中的整體狀態:有一個已備妥就算已備妥 */
   function techStatus(tid, cids) {
     const sts = cids.map(c => unitStatus(c, tid)).filter(Boolean);
-    return sts.find(x => x.k === 'ok') || sts.find(x => x.k === 'weight') || sts.find(x => x.k === 'lock') || sts[0] || null;
+    return sts.find(x => x.k === 'ok') || sts.find(x => x.k === 'weight') || sts.find(x => x.k === 'excl') || sts.find(x => x.k === 'lock') || sts[0] || null;
   }
-  const STI = { ok: ['✓', '已備妥'], lock: ['🔒', '超出權限'], weight: ['✗', '沒帶'], field: ['⤴', '需後送'], skip: ['–', '不需要'] };
+  const STI = { ok: ['✓', '已備妥'], lock: ['🔒', '超出權限'], weight: ['✗', '沒帶'], field: ['⤴', '需後送'], skip: ['–', '不需要'], excl: ['⊘', '你不帶'] };
   function stChip(st) {
     if (!st) return '';
     return `<span class="stchip ${st.k}" title="${esc(st.label || STI[st.k][1])}">${STI[st.k][0]} ${STI[st.k][1]}</span>`;
@@ -860,11 +896,22 @@ tr.mine td{background:var(--accent-soft)}
   }
   function median(xs) { const s = xs.slice().sort((a, b) => a - b), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; }
 
-  function solve() {
+  function solve(diff) {
     if (!S.activity) return;
-    setState({ solved: EBEMKO.solve(D, {
+    setState({ diff: diff || null, solved: EBEMKO.solve(D, {
       activity: S.activity, mission: S.mission, partySize: S.mission === 'team' ? S.partySize : 1,
-      provider: S.provider, budget: S.weightLimit == null ? undefined : S.weightLimit }) });
+      provider: S.provider, budget: S.weightLimit == null ? undefined : S.weightLimit, exclude: S.exclude }) });
+  }
+  /** 排除(或加回)裝備後重算,並記下前後差異給第 5 頁顯示 */
+  function resolveWith(exclude, label) {
+    const a = S.solved;
+    S.exclude = exclude;
+    solve();
+    if (!a || !label) return;
+    const b = S.solved, wa = new Map(a.kit.map(k => [k.item_id, k])), wb = new Map(b.kit.map(k => [k.item_id, k]));
+    const minus = a.kit.filter(k => k.weight_g > 0 && (!wb.has(k.item_id) || wb.get(k.item_id).qty < k.qty));
+    const plus = b.kit.filter(k => k.weight_g > 0 && (!wa.has(k.item_id) || wa.get(k.item_id).qty < k.qty));
+    setState({ diff: { label, minus, plus, a: [a.total_g, a.units_covered, a.score_covered], b: [b.total_g, b.units_covered, b.score_covered] } });
   }
   const autoLimit = () => EBEMKO.missionLimits(D, S.mission, S.mission === 'team' ? S.partySize : 1).total;
 
@@ -1161,6 +1208,7 @@ tr.mine td{background:var(--accent-soft)}
     const tierNote = tr => {
       if (used[tr]) return `<span class="stchip ok">✓ 採用${Object.keys(used).length > 1 || cids.length > 1 ? `（${used[tr]} 種傷病）` : ''}</span>`;
       if (need[tr] && S.provider && RANK[need[tr]] > RANK[S.provider]) return `<span class="stchip lock">🔒 需 ${esc(plabel(need[tr]))}</span>`;
+      if (r && slotsOf(TT[tid][tr]).some(sl => sl.every(i => S.exclude.includes(i.item_id)))) return '<span class="stchip excl">⊘ 你選擇不帶</span>';
       if (!st || st.k !== 'ok') return '';
       if (top >= 0 && TIERS.indexOf(tr) < top) {
         const heavy = slotsOf(TT[tid][tr]).some(sl => sl.every(i => itemW(i) > maxItem));
@@ -1169,6 +1217,7 @@ tr.mine td{background:var(--accent-soft)}
       return '<span class="stchip skip">備案</span>';
     };
     const mark = i => !r ? '' : inKit.has(i.item_id) ? '<span class="kin">✓ 在包內</span>'
+      : S.exclude.includes(i.item_id) ? '<span class="kout">⊘ 你選擇不帶</span>'
       : counted(ITEM[i.item_id]) ? '<span class="kout">✗ 未帶</span>' : '<span class="faint">隨身物品</span>';
     const live = TIERS.filter(tr => ((TT[tid] || {})[tr] || {}).s && TT[tid][tr].s !== 'none');
     const tiers = live.length ? live.map(tr => {
@@ -1271,7 +1320,7 @@ tr.mine td{background:var(--accent-soft)}
     const kit = r.kit.filter(k => k.weight_g > 0), free = r.kit.filter(k => k.weight_g === 0);
     const lowc = kit.filter(k => ITEM[k.item_id].weight_confidence === 'low').length;
     const grouped = GROUPS.map(gn => [gn, kit.filter(k => ITEM[k.item_id].group === gn)]).filter(([, xs]) => xs.length);
-    const row = k => { const used = [...new Set(k.used_by)]; return `<tr><td>${esc(k.name)}${k.qty > 1
+    const row = k => { const used = [...new Set(k.used_by)]; return `<tr><td><button type="button" class="noitem" data-noitem="${k.item_id}" title="不帶這件，看看會換成什麼" aria-label="不帶 ${esc(k.name)}">✕ 不帶</button>${esc(k.name)}${k.qty > 1
         ? `<span class="pill warn" title="被多個技術同時需要，故帶 ${k.qty} 份">×${k.qty} 份</span>` : ''}
         <br><span class="faint" style="font-size:11.5px">${esc(used.slice(0, 4).join('、'))}${used.length > 4 ? ` 等 ${used.length} 項` : ''}</span></td>
       <td class="w">${g(k.weight_g)}${k.qty > 1 ? `<br><span class="faint" style="font-size:11px">${g(k.unit_g)} × ${k.qty}</span>` : ''}</td></tr>`; };
@@ -1286,9 +1335,10 @@ tr.mine td{background:var(--accent-soft)}
       <div class="stat"><b>${lowc}</b><span>件重量為估計值</span></div>
     </div>
     ${r.total_g > 5000 ? `<div class="banner warn">⚠️ 總重 ${(r.total_g / 1000).toFixed(1)} kg，需要多人分揹。</div>` : ''}
+    ${diffBlock()}
     <div class="card">
       <h3 style="margin-top:0"><span class="mark">★</span> 裝備清單 <span class="faint" style="font-weight:400">${kit.length} 件 · ${g(r.total_g)}</span></h3>
-      <p class="faint" style="font-size:12.5px;margin:-4px 0 8px">挑選順序：先放直接加壓、傷口填塞；有剩餘重量就先放止血帶；其餘依「每公克能處理多少風險」挑選。每項技術先用最省重量的做法，剩下的重量再升級成 Best。</p>
+      <p class="faint" style="font-size:12.5px;margin:-4px 0 8px">不想帶某一件，按左邊的「✕ 不帶」，系統會重新配一次，告訴你改帶什麼。<br>挑選順序：先放直接加壓、傷口填塞；有剩餘重量就先放止血帶；其餘依「每公克能處理多少風險」挑選。每項技術先用最省重量的做法，剩下的重量再升級成 Best。</p>
       <div class="seg" style="margin-bottom:10px" role="group" aria-label="排列方式">
         <button type="button" data-pack="march" aria-pressed="${S.ui.packView !== 'group'}">依 MARCH-PAWS</button>
         <button type="button" data-pack="group" aria-pressed="${S.ui.packView === 'group'}">依分類</button>
@@ -1312,7 +1362,28 @@ tr.mine td{background:var(--accent-soft)}
     ${gapBlock(r)}`;
   }
 
-  const WHY = { '剩餘預算不足': '重量不夠', '單件超過任務上限': '單件太重', '野外不可行': '野外無法執行', '三層都沒方案(野外無法執行)': '野外無法執行' };
+  /** 第 5 頁:最近一次「不帶／加回」的前後比較 + 已排除清單 */
+  function diffBlock() {
+    const d = S.diff, ex = S.exclude;
+    if (!d && !ex.length) return '';
+    const nm = k => `${esc(k.name)} ${g(k.weight_g)}`, sign = v => v > 0 ? `+${v}` : `${v}`;
+    const delta = d ? [d.b[0] - d.a[0], d.b[1] - d.a[1], d.b[2] - d.a[2]] : null;
+    return `<div class="card exbox">
+      ${d ? `<h3 style="margin-top:0">${esc(d.label)}</h3>
+      <div class="exdiff">
+        ${d.plus.length ? `<div class="explus"><b>改帶</b>${d.plus.map(k => `<span>＋ ${nm(k)}</span>`).join('')}</div>` : ''}
+        ${d.minus.length ? `<div class="exminus"><b>拿掉</b>${d.minus.map(k => `<span>－ ${nm(k)}</span>`).join('')}</div>` : ''}
+        ${!d.plus.length && !d.minus.length ? '<div class="faint">清單沒有變化。</div>' : ''}
+      </div>
+      <p class="exnum"><span>總重 ${g(d.a[0])} → <b>${g(d.b[0])}</b>（${sign(delta[0])} g）</span>
+        <span>處置已備妥 ${d.a[1]} → <b>${d.b[1]}</b>（${sign(delta[1])}）</span>
+        <span>覆蓋分數 ${d.a[2]} → <b>${d.b[2]}</b>（${sign(delta[2])}）</span></p>` : ''}
+      ${ex.length ? `<div class="exlist"><span class="faint">你選擇不帶：</span>${ex.map(id => `<span class="exitem">${esc(ITEM[id].name_zh)}<button type="button" data-restore="${id}" aria-label="加回 ${esc(ITEM[id].name_zh)}">加回</button></span>`).join('')}
+        ${ex.length > 1 ? '<button type="button" class="linkbtn" data-restore="*">全部加回</button>' : ''}</div>` : ''}
+    </div>`;
+  }
+
+  const WHY = { '你選擇不帶': '你選擇不帶', '剩餘預算不足': '重量不夠', '單件超過任務上限': '單件太重', '野外不可行': '野外無法執行', '三層都沒方案(野外無法執行)': '野外無法執行' };
   const whyLabel = u => u.reason.startsWith('超出執行權限') ? u.reason.replace('超出執行權限(需 ', '超出權限（需 ').replace(/\)$/, '）')
     : u.reason.startsWith('沒有針劑') ? '沒有針劑要打，不需建路' : WHY[u.reason] || u.reason;
   // 沿用舊版:不說「你缺 N 種」,而是「已覆蓋 X/Y + 還差什麼 + 加多少重量能補上」
@@ -1371,7 +1442,7 @@ tr.mine td{background:var(--accent-soft)}
   function goto(page) { setState({ page }); window.scrollTo({ top: 0 }); }
 
   document.addEventListener('click', e => {
-    const t = e.target.closest('[data-act],[data-mis],[data-prov],[data-party],[data-page],[data-goto],[data-grp],[data-q],[data-cond],[data-tech],[data-tcond],[data-gocap],[data-addw],[data-pack],[data-tgap],[data-mine],[data-backlist],#gen,#copy,#themebtn');
+    const t = e.target.closest('[data-act],[data-mis],[data-prov],[data-party],[data-page],[data-goto],[data-grp],[data-q],[data-cond],[data-tech],[data-tcond],[data-gocap],[data-addw],[data-pack],[data-tgap],[data-mine],[data-backlist],[data-noitem],[data-restore],#gen,#copy,#themebtn');
     if (!t) return;
     const d = t.dataset;
     if (d.act !== undefined) setState({ activity: d.act, solved: null, ui: { ...S.ui, selectedCond: null, techCond: null, selectedTech: null } });
@@ -1383,6 +1454,11 @@ tr.mine td{background:var(--accent-soft)}
     else if (d.tech !== undefined) {
       setState({ ui: { ...S.ui, selectedTech: d.tech } });
       const el = $('#techdetail'); if (el && innerWidth <= 820) el.scrollIntoView({ block: 'start' });
+    }
+    else if (d.noitem) resolveWith(S.exclude.concat(d.noitem), `不帶「${ITEM[d.noitem].name_zh}」之後`);
+    else if (d.restore) {
+      const all = d.restore === '*';
+      resolveWith(all ? [] : S.exclude.filter(x => x !== d.restore), all ? '全部加回之後' : `加回「${ITEM[d.restore].name_zh}」之後`);
     }
     else if (d.backlist) { const el = $('#techwrap'); if (el) el.scrollIntoView({ block: 'start' }); }
     else if (d.tgap !== undefined) setState({ ui: { ...S.ui, techGap: !!d.tgap } });
