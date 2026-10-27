@@ -1,6 +1,4 @@
-<!doctype html>
-<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}</style></head><body>
-<title>EBEMKO 實證野外醫療包</title>
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}</style></head><body><title>EBEMKO 我想配置野外活動的緊急醫療包</title>
 <style>
 /* EBEMKO Web — 沿用專案既有 dashboard 的設計語言(臨床綠 + 亮暗雙主題) */
 :root{--ground:#f5f7f7;--surface:#fff;--surface-2:#eef2f2;--ink:#17201f;--ink-soft:#5c6968;--ink-faint:#8b9796;--line:#dde4e3;--line-strong:#c6d0cf;--accent:#0d7a72;--accent-ink:#0b5f59;--accent-soft:#d9ebe9;--m-x:#cf4040;--m-a:#c67d1e;--m-de:#6d55bd;--gap:#b45309;--gap-soft:#fef3e2;--ok:#2f7d5b;--shadow:0 1px 2px rgba(20,40,38,.04),0 4px 16px rgba(20,40,38,.05)}
@@ -236,7 +234,9 @@ tr.mine td{background:var(--accent-soft)}
   .eqtbl td.w{text-align:left}
   .eqtbl td[data-l]:not(:first-child)::before{content:attr(data-l) "：";color:var(--ink-faint);font-size:11.5px}
 }
-@media(max-width:560px){.nav .full{display:none}.nav .short{display:inline}.nav button{padding:14px 9px}}
+@media(max-width:1000px){.nav .full{display:none}.nav .short{display:inline}}
+@media(max-width:760px){.brand{display:none}}
+@media(max-width:560px){.nav button{padding:14px 9px}}
 /* ── 重要聲明:進站展開,可收合成最上方一行說明列(每次進站都重新展開) ── */
 [hidden]{display:none!important}
 .notice{background:var(--gap-soft);border-bottom:1px solid var(--gap);color:var(--ink)}
@@ -291,7 +291,7 @@ tr.mine td{background:var(--accent-soft)}
 </script>
 
 <header class="topbar">
-  <div class="brand">EBEMKO<em>·</em>實證野外醫療包</div>
+  <div class="brand">EBEMKO<em>·</em>我想配置野外活動的緊急醫療包</div>
   <nav class="nav" id="nav">
     <button type="button" data-page="mission">1 <span class="full">任務設定</span><span class="short">任務</span></button>
     <button type="button" data-page="evidence" disabled>2 <span class="full">風險總覽</span><span class="short">風險</span></button>
