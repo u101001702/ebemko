@@ -994,9 +994,9 @@ tr.mine td{background:var(--accent-soft)}
     <div class="card">
       <h3 style="margin-top:0">④ 你背得動多少？</h3>
       <p class="faint" style="font-size:12.5px;margin:-4px 0 9px">此任務型態的預設上限：${auto === Infinity ? '無上限' : g(auto)}。拉動拉條可以調整。</p>
-      <input type="range" class="slider" id="wl" min="500" max="${WL_INF}" step="100" value="${wlPos(S.weightLimit != null ? S.weightLimit : auto)}" aria-label="重量上限">
+      <input type="range" class="slider" id="wl" min="200" max="${WL_INF}" step="100" value="${wlPos(S.weightLimit != null ? S.weightLimit : auto)}" aria-label="重量上限">
       <div style="display:flex;justify-content:space-between;align-items:baseline">
-        <span class="faint" style="font-size:12.5px">0.5 kg</span>
+        <span class="faint" style="font-size:12.5px">200 g</span>
         <span class="bigw" id="wlv">${g(S.weightLimit != null ? S.weightLimit : auto)}</span>
         <span class="faint" style="font-size:12.5px">無上限 ▸</span>
       </div>
