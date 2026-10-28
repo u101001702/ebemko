@@ -204,6 +204,15 @@ tbody tr:hover{background:var(--surface-2)}
 .stchip.excl{background:var(--surface-2);color:var(--gap);border-color:var(--gap);border-style:dashed}
 .noitem{font:inherit;font-size:11px;padding:1px 7px;margin-right:7px;border-radius:20px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink-faint);cursor:pointer;vertical-align:1px}
 .noitem:hover,.noitem:focus-visible{border-color:var(--gap);color:var(--gap)}
+.kittbl th{font-size:11.5px;font-weight:600;color:var(--ink-faint);text-align:left;padding:4px 8px;border-bottom:1px solid var(--line-strong)}
+.kittbl th.w{text-align:right}
+.kittbl td.whyc{width:44%;font-size:12px;color:var(--ink-soft)}
+.wst{display:inline-block;font-size:11px;font-weight:700;color:var(--accent-ink);background:var(--accent-soft);border-radius:4px;padding:0 6px;margin-right:6px}
+.why summary{cursor:pointer;font-size:11.5px;color:var(--accent-ink);margin-top:3px}
+.whyul{margin:5px 0 2px;padding-left:16px;font-size:12px;line-height:1.55;color:var(--ink-soft)}
+.whyul li{margin-bottom:3px}
+.whym{display:none}.whym .whyshort{font-size:12px;color:var(--ink-soft);margin-top:4px}
+@media(max-width:700px){.kittbl .whyc{display:none}.whym{display:block}}
 .exbox{border-color:var(--accent)}
 .exdiff{display:flex;flex-wrap:wrap;gap:10px 28px;font-size:13.5px}
 .exdiff>div{display:flex;flex-direction:column;gap:3px}
@@ -387,7 +396,7 @@ tr.mine td{background:var(--accent-soft)}
   /** D99 第二階段:已覆蓋的單位,用剩下的重量往上一層升級。
    *  每輪先挑優先止血(FIRST_TECHS),再挑分數高的,同分挑新增重量少的;升到帶得動的最高層。
    *  升級不改變覆蓋數,只改善「用什麼做」。回傳剩餘預算。 */
-  function upgrade(covered, spec, items, selected, qty, usedBy, maxItem, budget, onlyM) {
+  function upgrade(covered, spec, items, selected, qty, usedBy, maxItem, budget, onlyM, log) {
     for (;;) {
       var pick = -1, pickPlan = null, key = null;
       for (var i = 0; i < covered.length; i++) {
@@ -408,6 +417,7 @@ tr.mine td{background:var(--accent-soft)}
         qty[x.it.item_id] = (qty[x.it.item_id] || 0) + x.qty;
         (usedBy[x.it.item_id] = usedBy[x.it.item_id] || []).push(cu.technique);
       });
+      if (log) log(pickPlan, cu, { stage: onlyM ? "upM" : "up", from: cu.tier, left: budget });
       budget -= pickPlan.cost;
       cu.upgraded_from = cu.upgraded_from || cu.tier;
       cu.tier = pickPlan.tier;
@@ -542,7 +552,7 @@ tr.mine td{background:var(--accent-soft)}
     var ok = n.options.filter(function (o) { var w = items[o.item_id].w; return !(w > 0 && w > maxItem); });
     if (!ok.length) return { heavy: n.options };
     ok.sort(function (a, b) { return (items[a.item_id].w * a.qty - items[b.item_id].w * b.qty) || cmp(a.item_id, b.item_id); });  // D105:比較含份數的重量
-    return { add: ok[0] };
+    return { add: ok[0], options: n.options };
   }
 
   /** 替一個單位規劃:回 {plan} 或 {blocked}。cost 隨已選裝備動態變化。
@@ -563,7 +573,7 @@ tr.mine td{background:var(--accent-soft)}
         // D102(焜哥審核):單件剛好等於上限可以帶(舊系統是 >=)
         var p = pickOption(n, items, selected, maxItem);
         if (p.heavy) p.heavy.forEach(function (o) { heavy.push(items[o.item_id]); });
-        else if (p.add) add.push({ it: items[p.add.item_id], qty: p.add.qty });
+        else if (p.add) add.push({ it: items[p.add.item_id], qty: p.add.qty, options: p.options });
         else if (tier !== "Best" && p.have.concurrent && items[p.have.item_id].w > 0) {
           extra.push({ it: items[p.have.item_id], qty: p.have.qty });   // 同時佔用 → 多帶一份
         }
@@ -685,12 +695,35 @@ tr.mine td{background:var(--accent-soft)}
     var selected = {}, qty = {}, usedBy = {}, covered = [], budget = budget0, done = {}, mUpgraded = false;
     // D107-B 焜哥 2026-10-28:一定要帶的先放進包、扣重量;之後用到它的技術都不用再花重量
     pin.forEach(function (id) { selected[id] = true; qty[id] = 1; budget -= items[id].w; });
+    // 焜哥 2026-10-29:記錄每件裝備為什麼被放進包(第 5 頁「為什麼帶它」)。只記錄,不影響挑選。
+    var why = {}, step = 0, last = null;   // last = 上一次加裝的 {ids, covers}:之後 0 g 就能做的處置記在它名下
+    pin.forEach(function (id) { why[id] = { stage: "pin" }; });
+    var log = function (plan, u, info) {
+      if (!plan.add.length && !plan.extra.length) return;
+      step++;
+      var unit = { condition: u.condition, technique: u.technique, score: u.score, tier: plan.tier };
+      last = { ids: {}, covers: [] };
+      plan.add.forEach(function (x) { last.ids[x.it.item_id] = true; });
+      plan.add.forEach(function (x) {
+        if (why[x.it.item_id]) return;
+        why[x.it.item_id] = Object.assign({ step: step, unit: unit, cost: plan.cost, qty: x.qty,
+          with: plan.add.filter(function (y) { return y !== x; }).map(function (y) { return y.it.name; }),
+          alts: (x.options || []).filter(function (o) { return o.item_id !== x.it.item_id; }).map(function (o) {
+            var w = items[o.item_id].w;
+            return { name: items[o.item_id].name, g: w * o.qty, heavy: w > 0 && w > lim.maxItem };
+          }), covers: last.covers }, info);
+      });
+      plan.extra.forEach(function (x) {
+        var w = why[x.it.item_id];
+        if (w) (w.extra = w.extra || []).push(u.technique);
+      });
+    };
     var gated = function (u) {                 // D97:沒有輸液或針劑可給,不建路
       var need = NEEDS_USE[u.technique_id];
       return need && !need.some(function (t) { return done[u.condition_id + "|" + t]; });
     };
     while (remaining.length) {
-      var best = -1, bestPlan = null, bestEff = -1, bestStage = -1, bonusCache = {}, multiCache = {};
+      var best = -1, bestPlan = null, bestEff = -1, bestStage = -1, bestGain = 0, bonusCache = {}, multiCache = {};
       for (var i = 0; i < remaining.length; i++) {
         if (gated(remaining[i])) continue;
         var r = planUnit(remaining[i], spec, items, selected, lim.maxItem, budget, CHEAP);
@@ -709,16 +742,21 @@ tr.mine td{background:var(--accent-soft)}
         }
         var eff = r.plan.cost <= 0 ? Infinity : gain / r.plan.cost;
         if (stage > bestStage || (stage === bestStage && eff > bestEff)) {   // 同分取先排序者
-          best = i; bestPlan = r.plan; bestEff = eff; bestStage = stage;
+          best = i; bestPlan = r.plan; bestEff = eff; bestStage = stage; bestGain = gain;
         }
       }
       if (!mUpgraded && (best < 0 || bestStage === 0)) {   // D99/D103:壓迫、填塞、止血帶都處理完 → 先升級壓迫、填塞
-        budget = upgrade(covered, spec, items, selected, qty, usedBy, lim.maxItem, budget, true);
+        budget = upgrade(covered, spec, items, selected, qty, usedBy, lim.maxItem, budget, true, log);
         mUpgraded = true;
         continue;
       }
       if (best < 0) break;
       var u = remaining.splice(best, 1)[0];
+      if (bestPlan.cost <= 0 && last && ((spec[u.technique_id] || {})[bestPlan.tier] || { need: [] }).need.some(function (n) {
+        return n.options.some(function (o) { return last.ids[o.item_id]; });
+      })) last.covers.push(u.condition + "・" + u.technique);
+      log(bestPlan, u, { stage: ["greedy", "second", "first"][bestStage], eff: bestEff, gain: bestGain, left: budget,
+                         method: perUnit ? "unit" : "bundle" });
       bestPlan.add.forEach(function (x) { selected[x.it.item_id] = true; });
       bestPlan.add.concat(bestPlan.extra).forEach(function (x) {
         qty[x.it.item_id] = (qty[x.it.item_id] || 0) + x.qty;
@@ -733,7 +771,7 @@ tr.mine td{background:var(--accent-soft)}
       }));
     }
 
-    budget = upgrade(covered, spec, items, selected, qty, usedBy, lim.maxItem, budget);
+    budget = upgrade(covered, spec, items, selected, qty, usedBy, lim.maxItem, budget, false, log);
 
     // D98 補正(焜哥 2026-10-19):給液已覆蓋 → 同傷病的建路也算已覆蓋(器材含在給液內),但不另外計分,
     //   避免畫面出現「有輸液、沒建路」。只影響顯示與覆蓋數,不影響挑選。
@@ -770,7 +808,7 @@ tr.mine td{background:var(--accent-soft)}
     var kit = Object.keys(selected).sort().map(function (id) {
       var it = items[id], n = qty[id] || 1;
       return { item_id: id, name: it.name, qty: n, unit_g: it.w, weight_g: it.w * n, used_by: usedBy[id] || [],
-               pinned: pin.indexOf(id) >= 0 };
+               pinned: pin.indexOf(id) >= 0, why: why[id] || null };
     });
     var total = kit.reduce(function (a, x) { return a + x.weight_g; }, 0);
 
@@ -1353,10 +1391,13 @@ tr.mine td{background:var(--accent-soft)}
     const lowc = kit.filter(k => ITEM[k.item_id].weight_confidence === 'low').length;
     const grouped = GROUPS.map(gn => [gn, kit.filter(k => ITEM[k.item_id].group === gn)]).filter(([, xs]) => xs.length);
     const pinOnly = kit.filter(k => k.pinned && !k.used_by.length);
-    const row = k => { const used = [...new Set(k.used_by)]; return `<tr><td><button type="button" class="noitem" data-noitem="${k.item_id}" title="不帶這件，看看會換成什麼" aria-label="不帶 ${esc(k.name)}">✕ 不帶</button>${esc(k.name)}${k.pinned ? '<span class="pill pin">📌 你指定的</span>' : ''}${k.qty > 1
+    const batch = whyBatches(kit);
+    const row = k => { const used = [...new Set(k.used_by)], w = whyText(k, batch, r); return `<tr><td><button type="button" class="noitem" data-noitem="${k.item_id}" title="不帶這件，看看會換成什麼" aria-label="不帶 ${esc(k.name)}">✕ 不帶</button>${esc(k.name)}${k.pinned ? '<span class="pill pin">📌 你指定的</span>' : ''}${k.qty > 1
         ? `<span class="pill warn" title="被多個技術同時需要，故帶 ${k.qty} 份">×${k.qty} 份</span>` : ''}
-        <br><span class="faint" style="font-size:11.5px">${used.length ? esc(used.slice(0, 4).join('、')) + (used.length > 4 ? ` 等 ${used.length} 項` : '') : k.pinned ? '目前沒有技術用到（可能超出你的證照等級），照你的指定帶上' : ''}</span></td>
-      <td class="w">${g(k.weight_g)}${k.qty > 1 ? `<br><span class="faint" style="font-size:11px">${g(k.unit_g)} × ${k.qty}</span>` : ''}</td></tr>`; };
+        <br><span class="faint" style="font-size:11.5px">${used.length ? esc(used.slice(0, 4).join('、')) + (used.length > 4 ? ` 等 ${used.length} 項` : '') : k.pinned ? '目前沒有技術用到（可能超出你的證照等級），照你的指定帶上' : ''}</span>
+        ${w ? `<details class="why whym"><summary>為什麼帶它？</summary><div class="whyshort">${w.short}</div>${w.detail}</details>` : ''}</td>
+      <td class="w">${g(k.weight_g)}${k.qty > 1 ? `<br><span class="faint" style="font-size:11px">${g(k.unit_g)} × ${k.qty}</span>` : ''}</td>
+      <td class="whyc">${w ? `<div class="whyshort">${w.short}</div><details class="why"><summary>詳細</summary>${w.detail}</details>` : ''}</td></tr>`; };
     const nm = (ACTL[r.input.activity] || ['', r.input.activity])[1];
     return `
     <h2>醫療包清單</h2>
@@ -1372,19 +1413,19 @@ tr.mine td{background:var(--accent-soft)}
     ${diffBlock()}
     <div class="card">
       <h3 style="margin-top:0"><span class="mark">★</span> 裝備清單 <span class="faint" style="font-weight:400">${kit.length} 件 · ${g(r.total_g)}</span></h3>
-      <p class="faint" style="font-size:12.5px;margin:-4px 0 8px">不想帶某一件，按左邊的「✕ 不帶」，系統會重新配一次，告訴你改帶什麼。<br>挑選順序：先放直接加壓、傷口填塞；有剩餘重量就先放止血帶；其餘依「每公克能處理多少風險」挑選。每項技術先用最省重量的做法，剩下的重量再升級成 Best。</p>
+      <p class="faint" style="font-size:12.5px;margin:-4px 0 8px">不想帶某一件，按左邊的「✕ 不帶」，系統會重新配一次，告訴你改帶什麼。右欄「為什麼帶它」是系統挑這件時的紀錄。<br>挑選順序：先放直接加壓、傷口填塞；有剩餘重量就先放止血帶；其餘依「每公克能處理多少風險」挑選。每項技術先用最省重量的做法，剩下的重量再升級成 Best。</p>
       <div class="seg" style="margin-bottom:10px" role="group" aria-label="排列方式">
         <button type="button" data-pack="march" aria-pressed="${S.ui.packView !== 'group'}">依 MARCH-PAWS</button>
         <button type="button" data-pack="group" aria-pressed="${S.ui.packView === 'group'}">依分類</button>
       </div>
-      ${S.ui.packView === 'group' ? `<div class="tblwrap"><table><tbody>${grouped.map(([gn, xs]) =>
-        `<tr><td colspan="2" style="background:var(--surface-2);font-size:11.5px;font-weight:700;color:var(--ink-faint)">${gn} <span style="font-weight:400">${g(xs.reduce((a, k) => a + k.weight_g, 0))}</span></td></tr>`
+      ${S.ui.packView === 'group' ? `<div class="tblwrap"><table class="kittbl">${KITHEAD}<tbody>${grouped.map(([gn, xs]) =>
+        `<tr><td colspan="3" style="background:var(--surface-2);font-size:11.5px;font-weight:700;color:var(--ink-faint)">${gn} <span style="font-weight:400">${g(xs.reduce((a, k) => a + k.weight_g, 0))}</span></td></tr>`
         + xs.slice().sort((a, b) => b.weight_g - a.weight_g).map(row).join('')).join('')}</tbody></table></div>`
       : `<p class="faint" style="font-size:12px;margin:0 0 8px">同一件裝備會在每個用到它的模組底下都出現，所以各模組小計加起來會大於總重。</p>
-      <div class="tblwrap"><table><tbody>${marchGroups(r, kit).map(({ m, label, goals, sub }) =>
-        `<tr><td colspan="2" style="background:var(--accent-soft);font-size:12.5px;font-weight:700;color:var(--accent-ink)">${m} ${label} <span style="font-weight:400">${g(sub)}</span></td></tr>`
-        + goals.map(([gid, xs]) => `<tr><td colspan="2" style="background:var(--surface-2);font-size:11.5px;font-weight:700;color:var(--ink-faint)">${esc(GOAL[gid] ? GOAL[gid].name_zh : gid)}</td></tr>`
-          + xs.map(row).join('')).join('')).join('')}${pinOnly.length ? `<tr><td colspan="2" style="background:var(--accent-soft);font-size:12.5px;font-weight:700;color:var(--accent-ink)">📌 你指定、但沒有技術用到 <span style="font-weight:400">${g(pinOnly.reduce((a, k) => a + k.weight_g, 0))}</span></td></tr>` + pinOnly.map(row).join('') : ''}</tbody></table></div>`}
+      <div class="tblwrap"><table class="kittbl">${KITHEAD}<tbody>${marchGroups(r, kit).map(({ m, label, goals, sub }) =>
+        `<tr><td colspan="3" style="background:var(--accent-soft);font-size:12.5px;font-weight:700;color:var(--accent-ink)">${m} ${label} <span style="font-weight:400">${g(sub)}</span></td></tr>`
+        + goals.map(([gid, xs]) => `<tr><td colspan="3" style="background:var(--surface-2);font-size:11.5px;font-weight:700;color:var(--ink-faint)">${esc(GOAL[gid] ? GOAL[gid].name_zh : gid)}</td></tr>`
+          + xs.map(row).join('')).join('')).join('')}${pinOnly.length ? `<tr><td colspan="3" style="background:var(--accent-soft);font-size:12.5px;font-weight:700;color:var(--accent-ink)">📌 你指定、但沒有技術用到 <span style="font-weight:400">${g(pinOnly.reduce((a, k) => a + k.weight_g, 0))}</span></td></tr>` + pinOnly.map(row).join('') : ''}</tbody></table></div>`}
       ${free.length ? `<p class="faint" style="font-size:12.5px;margin:12px 0 0"><b>不計重</b>（隨身或登山共用品）：${esc(free.map(k => k.name).join('、'))}</p>` : ''}
       <p class="faint" style="font-size:12px;margin:8px 0 0">⚖️ 總重只算醫療包裡的東西。口服藥每項以 2 g 計、針劑每項 15 g；睡袋、衣物、頭燈、繩索、登山杖等登山本來就會帶的共用裝備，借來做即造用途時記 0 g。</p>
     </div>
@@ -1394,6 +1435,45 @@ tr.mine td{background:var(--accent-soft)}
       <span class="faint" id="copymsg" style="font-size:12.5px;align-self:center"></span>
     </div>
     ${gapBlock(r)}`;
+  }
+
+  // 焜哥 2026-10-29:每件裝備「為什麼帶它」——讀 solve 記下的挑選紀錄(kit[].why),只解說,不重算。
+  const KITHEAD = '<thead><tr><th>裝備</th><th class="w">重量</th><th class="whyc">為什麼帶它</th></tr></thead>';
+  const STAGE = { pin: '📌 你指定', first: '① 優先止血', second: '② 止血帶', greedy: '③ 效益比', upM: '④ 升級止血', up: '④ 剩餘重量升級' };
+  /** 計重裝備依放進包的先後編「第幾批」(同一次加裝的同一批) */
+  function whyBatches(kit) {
+    const steps = [...new Set(kit.filter(k => k.why && k.why.step).map(k => k.why.step))].sort((a, b) => a - b);
+    return new Map(steps.map((st, i) => [st, i + 1]));
+  }
+  const num = (v, d) => (Math.round(v * 10 ** d) / 10 ** d).toLocaleString('en');
+  const tierTxt = t => `${t}（${TIERINFO[t][0]}）`;
+  function whyText(k, batch, r) {
+    const w = k.why;
+    if (!w) return null;
+    if (w.stage === 'pin') return { short: `<span class="wst">${STAGE.pin}</span>你指定一定要帶，最先放進包，不跟其他裝備比。`, detail: '' };
+    const u = w.unit, n = batch.get(w.step), main = `${esc(u.condition)}・${esc(u.technique)}`;
+    let short = `<span class="wst">${STAGE[w.stage]}</span>第 ${n} 批放進包，為了「${main}」（${u.score} 分）`;
+    if (w.stage === 'greedy') short += `，效益 ${num(w.eff, 2)} 分/g`;
+    if (w.stage === 'up' || w.stage === 'upM') short = `<span class="wst">${STAGE[w.stage]}</span>第 ${n} 批：「${main}」從 ${esc(w.from)} 升級到 ${esc(u.tier)}`;
+    const li = [];
+    li.push(`<b>主要用途</b>：${main}，嚴重度 ${u.score} 分，用 ${esc(tierTxt(u.tier))}層的做法。`);
+    if (w.stage === 'first') li.push('<b>為什麼先放</b>：直接加壓、傷口填塞是 MARCH 的第一步，排在所有處置前面（D83／D102）。');
+    if (w.stage === 'second') li.push('<b>為什麼先放</b>：直接加壓、傷口填塞處理完，有剩餘重量就先放止血帶，之後才輪其他處置（D103）。');
+    if (w.stage === 'greedy') {
+      li.push(`<b>效益比</b>：${num(w.gain, 1)} 分 ÷ 新增 ${g(w.cost)} = <b>${num(w.eff, 2)} 分/g</b>，是當輪所有還沒處理的處置裡最高的。`
+        + (w.method === 'bundle' ? '這裡的分數是「這次加裝能一起完成的所有處置」加總，再加上一物多用的加分。' : '這裡的分數是這一項處置的分數，再加上一物多用的加分。'));
+    }
+    if (w.stage === 'upM') li.push(`<b>為什麼升級</b>：所有處置先用最省重量的做法；止血處置原本用 ${esc(tierTxt(w.from))}層。剩 ${g(w.left)} 時先升級止血，每次升級不超過剩餘重量的一半（D99）。`);
+    if (w.stage === 'up') li.push(`<b>為什麼升級</b>：所有處置都先用最省重量的做法；這項原本用 ${esc(tierTxt(w.from))}層。配完還剩 ${g(w.left)}，依嚴重度高低把已備妥的處置升級（D99）。`);
+    if (w.with.length) li.push(`<b>同一批一起放進</b>：${esc(w.with.join('、'))}（這個做法要這幾件一起才能做）。`);
+    if (w.covers.length) li.push(`<b>放進後一起完成</b> ${w.covers.length} 項：${esc(w.covers.slice(0, 6).join('、'))}${w.covers.length > 6 ? ` 等` : ''}。`);
+    if (w.alts.length) {
+      const mine = k.unit_g * (w.qty || 1);
+      li.push(`<b>同一格的替代品</b>：${w.alts.map(a => `${esc(a.name)} ${g(a.g)}（${a.heavy ? '單件超過任務上限' : a.g > mine ? '比較重' : '一樣重，依編號'}）`).join('、')}。同一格挑包內已有的，沒有就挑最輕的。`);
+    }
+    if (w.extra && w.extra.length) li.push(`<b>帶 ${k.qty} 份</b>：${esc([...new Set(w.extra)].join('、'))}可能跟其他處置同時要用，多帶一份。`);
+    if (w.left != null && w.stage !== 'up' && w.stage !== 'upM') li.push(`放進前還剩 ${g(w.left)}${r.input.budget === Infinity ? '（無上限）' : ''}。`);
+    return { short, detail: `<ul class="whyul">${li.map(x => `<li>${x}</li>`).join('')}</ul>` };
   }
 
   /** 指定的裝備加起來就超過上限 → 警告(照樣帶,不偷偷拿掉) */
