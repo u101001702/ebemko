@@ -206,7 +206,7 @@ tbody tr:hover{background:var(--surface-2)}
 .noitem:hover,.noitem:focus-visible{border-color:var(--gap);color:var(--gap)}
 .kittbl th{font-size:11.5px;font-weight:600;color:var(--ink-faint);text-align:left;padding:4px 8px;border-bottom:1px solid var(--line-strong)}
 .kittbl th.w{text-align:right}
-.kittbl td.whyc{width:44%;font-size:12px;color:var(--ink-soft)}
+.kittbl .whyc{width:24%;min-width:150px;font-size:12px;color:var(--ink-soft)}
 .wst{display:inline-block;font-size:11px;font-weight:700;color:var(--accent-ink);background:var(--accent-soft);border-radius:4px;padding:0 6px;margin-right:6px}
 .why summary{cursor:pointer;font-size:11.5px;color:var(--accent-ink);margin-top:3px}
 .whyul{margin:5px 0 2px;padding-left:16px;font-size:12px;line-height:1.55;color:var(--ink-soft)}
@@ -1450,12 +1450,13 @@ tr.mine td{background:var(--accent-soft)}
   function whyText(k, batch, r) {
     const w = k.why;
     if (!w) return null;
-    if (w.stage === 'pin') return { short: `<span class="wst">${STAGE.pin}</span>你指定一定要帶，最先放進包，不跟其他裝備比。`, detail: '' };
+    if (w.stage === 'pin') return { short: '📌 你指定一定要帶', detail: '<ul class="whyul"><li>最先放進包，不跟其他裝備比。</li></ul>' };
     const u = w.unit, n = batch.get(w.step), main = `${esc(u.condition)}・${esc(u.technique)}`;
-    let short = `<span class="wst">${STAGE[w.stage]}</span>第 ${n} 批放進包，為了「${main}」（${u.score} 分）`;
-    if (w.stage === 'greedy') short += `，效益 ${num(w.eff, 2)} 分/g`;
-    if (w.stage === 'up' || w.stage === 'upM') short = `<span class="wst">${STAGE[w.stage]}</span>第 ${n} 批：「${main}」從 ${esc(w.from)} 升級到 ${esc(u.tier)}`;
+    // 焜哥 2026-10-29:右欄只留「傷病・技術」＋一個數字,其餘(階段、第幾批)進詳細
+    const short = main + (w.stage === 'greedy' ? `，效益 ${num(w.eff, 2)} 分/g`
+      : w.stage === 'up' || w.stage === 'upM' ? `，升級 ${esc(u.tier)}` : '，止血優先');
     const li = [];
+    li.push(`<span class="wst">${STAGE[w.stage]}</span>第 ${n} 批放進包${w.stage === 'up' || w.stage === 'upM' ? `（從 ${esc(w.from)} 升級到 ${esc(u.tier)}）` : ''}。`);
     li.push(`<b>主要用途</b>：${main}，嚴重度 ${u.score} 分，用 ${esc(tierTxt(u.tier))}層的做法。`);
     if (w.stage === 'first') li.push('<b>為什麼先放</b>：直接加壓、傷口填塞是 MARCH 的第一步，排在所有處置前面（D83／D102）。');
     if (w.stage === 'second') li.push('<b>為什麼先放</b>：直接加壓、傷口填塞處理完，有剩餘重量就先放止血帶，之後才輪其他處置（D103）。');
